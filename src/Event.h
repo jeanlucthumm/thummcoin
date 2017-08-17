@@ -5,9 +5,21 @@
 #ifndef THUMMCOIN_EVENT_H
 #define THUMMCOIN_EVENT_H
 
+#include <cstddef>
+#include <vector>
 
 class Event {
+public:
+  enum Type {
+    Transaction
+  };
 
+  Event(const std::vector<std::byte> &data);
+
+  Type type();
+
+private:
+  virtual bool interpret() = 0;
 };
 
 
