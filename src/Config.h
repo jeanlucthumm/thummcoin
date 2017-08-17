@@ -19,6 +19,8 @@ public:
 
   std::ifstream peerList();
 
+  boost::filesystem::path getDataDir() const;
+
 private:
   boost::filesystem::path dataDir;
   boost::filesystem::path walletConfigPath;

@@ -44,3 +44,7 @@ std::ifstream Config::walletConfig() {
 std::ifstream Config::peerList() {
   return ifstream{peerListPath.string()};
 }
+
+boost::filesystem::path Config::getDataDir() const {
+  return dataDir;
+}
