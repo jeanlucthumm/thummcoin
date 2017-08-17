@@ -25,7 +25,7 @@ bool Config::validate() {
   vector<fs::directory_entry> entries(begin, end);
 
   for (auto &entry : entries) {
-    const string &name = entry.path().string();
+    const string &name = entry.path().filename().string();
     if (name == WALLET_CONFIG_NAME) {
       walletConfigPath = entry.path();
     } else if (name == PEER_LIST_NAME) {

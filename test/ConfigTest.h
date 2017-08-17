@@ -10,14 +10,18 @@
 
 class ConfigTest : public ::testing::Test {
 public:
-  virtual SetUp() {
+  virtual void SetUp() {
     good = Config{"data/data1"};
     bad = Config{"test/bad_data"};
   }
 
-  Config good;
-  Config bad;
+  Config good{"test/good_data"};
+  Config bad{"test/bad_data"};
 };
 
+TEST_F(ConfigTest, validate) {
+  EXPECT_TRUE(good.validate());
+  EXPECT_FALSE(bad.validate());
+}
 
 #endif //THUMMCOIN_CONFIGTEST_H
