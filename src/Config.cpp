@@ -36,3 +36,11 @@ bool Config::validate() {
   return !walletConfigPath.empty() &&
          !peerListPath.empty();
 }
+
+std::ifstream Config::walletConfig() {
+  return ifstream{walletConfigPath.string()};
+}
+
+std::ifstream Config::peerList() {
+  return ifstream{peerListPath.string()};
+}
