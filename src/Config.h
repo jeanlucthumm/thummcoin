@@ -11,7 +11,9 @@
 
 class Config {
 public:
-  Config(boost::filesystem::path dataDir);
+  Config(const boost::filesystem::path dataDir);
+
+  bool validate(); // this must be called right after constructor
 
   std::ifstream walletConfig();
 
