@@ -6,8 +6,21 @@
 #define THUMMCOIN_CONFIG_H
 
 
-class Config {
+#include <fstream>
+#include <boost/filesystem.hpp>
 
+class Config {
+public:
+  Config(boost::filesystem::path dataDir);
+
+  std::ifstream walletConfig();
+
+  std::ifstream peerList();
+
+private:
+  boost::filesystem::path dataDir;
+  boost::filesystem::path walletConfigPath;
+  boost::filesystem::path peerListPath;
 };
 
 
