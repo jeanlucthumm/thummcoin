@@ -8,7 +8,7 @@ enable_testing()
 find_package(Boost COMPONENTS system thread REQUIRED)
 find_package(GTest)
 
-set(SOURCES main.cpp)
+file(GLOB SOURCES src/*.cpp src/*.h)
 file(GLOB TEST_SOURCES test/*.h)
 
 add_executable(thummcoin ${SOURCES})
