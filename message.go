@@ -2,7 +2,7 @@ package main
 
 import (
 	"bytes"
-	"encoding/binary"
+	"github.com/lunixbochs/struc"
 )
 
 const (
@@ -21,7 +21,7 @@ type Transaction struct {
 
 func (t *Transaction) MarshalBinary() ([]byte, error) {
 	buf := new(bytes.Buffer)
-	err := binary.Write(buf, binary.BigEndian, t)
+	err := struc.Pack(buf, t)
 	if err != nil {
 		return nil, err
 	}
@@ -30,5 +30,5 @@ func (t *Transaction) MarshalBinary() ([]byte, error) {
 
 func (t *Transaction) UnmarshalBinary(data []byte) error {
 	buf := bytes.NewReader(data)
-	return binary.Read(buf, binary.BigEndian, t)
+	return struc.Unpack(buf, t)
 }

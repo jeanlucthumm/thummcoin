@@ -7,11 +7,13 @@ import (
 	"encoding/gob"
 )
 
+/// Node
+
 type Node struct {
 	peers map[*peer]bool // TODO use sync map
 	ln    net.Listener
 
-	broadcast chan *message // note consider making public
+	Broadcast chan *message
 	add       chan *peer
 	del       chan *peer
 	stop      chan bool
@@ -21,7 +23,7 @@ func NewNode() *Node {
 	return &Node{
 		peers: make(map[*peer]bool),
 
-		broadcast: make(chan *message),
+		Broadcast: make(chan *message),
 		add:       make(chan *peer),
 		del:       make(chan *peer),
 		stop:      make(chan bool),
@@ -54,7 +56,7 @@ func (n *Node) Stop() {
 func (n *Node) handleChannels() {
 	for {
 		select {
-		case msg := <-n.broadcast:
+		case msg := <-n.Broadcast:
 			for p := range n.peers {
 				// encode the message and send
 				enc := p.encoder()
@@ -77,6 +79,7 @@ func (n *Node) handleChannels() {
 
 func (n *Node) handleConnections() {
 	for {
+		// FIXME what if a peer reconnects?
 		conn, err := n.ln.Accept()
 		if err != nil {
 			continue
@@ -86,6 +89,8 @@ func (n *Node) handleConnections() {
 		go peer.Handle()
 	}
 }
+
+/// peer
 
 type peer struct {
 	socket net.Conn
