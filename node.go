@@ -28,8 +28,13 @@ func NewNode() *Node {
 	}
 }
 
-func (n *Node) Start(addr net.Addr) error {
-	var err error
+func (n *Node) Start(network string, loc string) error {
+	addr, err := net.ResolveTCPAddr(network, loc)
+	if err != nil {
+		log.Fatalln("Could not start node:", err)
+		return err
+	}
+
 	n.ln, err = net.Listen(addr.Network(), addr.String())
 	if err != nil {
 		log.Fatalln("Could not start node:", err)
