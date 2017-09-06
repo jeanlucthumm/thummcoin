@@ -22,7 +22,10 @@ func (n *Node) Start(addr net.Addr) error {
 	log.Println("Node listening on:", addr)
 
 	for {
-		conn, _ := ln.Accept()
+		conn, err := ln.Accept()
+		if err != nil {
+			continue
+		}
 		peer := &Peer{socket: conn}
 		go peer.handle()
 	}
@@ -33,4 +36,5 @@ type Peer struct {
 }
 
 func (p *Peer) handle() {
+
 }
