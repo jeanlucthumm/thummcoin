@@ -34,18 +34,13 @@ func (n *Node) Start(addr net.Addr) error {
 	ln, err := net.Listen(addr.Network(), addr.String())
 	if err != nil {
 		log.Fatalln("Could not start node:", err)
+		return err
 	}
 	log.Println("Node listening on:", addr)
 
-	for {
-		conn, err := ln.Accept()
-		if err != nil {
-			continue
-		}
-		fmt.Println("New connection:", conn.RemoteAddr()) // DEBUG
-		peer := &peer{socket: conn}
-		go peer.Handle()
-	}
+	go n.handleChannels() // make node responsive
+	go n.handleConnections(ln)
+	return nil
 }
 
 func (n *Node) handleChannels() {
@@ -60,6 +55,18 @@ func (n *Node) handleChannels() {
 		}
 	case p := <-n.add:
 		n.peers[p] = true
+	}
+}
+
+func (n *Node) handleConnections(ln net.Listener) {
+	for {
+		conn, err := ln.Accept()
+		if err != nil {
+			continue
+		}
+		fmt.Println("New connection:", conn.RemoteAddr()) // DEBUG
+		peer := &peer{socket: conn}
+		go peer.Handle()
 	}
 }
 
