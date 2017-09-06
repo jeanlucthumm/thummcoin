@@ -2,19 +2,19 @@ package main
 
 import (
 	"net"
-	"sync"
 	"log"
 	"fmt"
 	"encoding/gob"
 )
 
 type Node struct {
-	peers map[*peer]bool
-	mux   sync.Mutex
+	peers map[*peer]bool // TODO use sync map
+	ln    net.Listener
 
 	broadcast chan *message // note consider making public
 	add       chan *peer
 	del       chan *peer
+	stop      chan bool
 }
 
 func NewNode() *Node {
@@ -24,14 +24,13 @@ func NewNode() *Node {
 		broadcast: make(chan *message),
 		add:       make(chan *peer),
 		del:       make(chan *peer),
+		stop:      make(chan bool),
 	}
 }
 
 func (n *Node) Start(addr net.Addr) error {
-	n.mux.Lock()
-	defer n.mux.Unlock()
-
-	ln, err := net.Listen(addr.Network(), addr.String())
+	var err error
+	n.ln, err = net.Listen(addr.Network(), addr.String())
 	if err != nil {
 		log.Fatalln("Could not start node:", err)
 		return err
@@ -39,28 +38,41 @@ func (n *Node) Start(addr net.Addr) error {
 	log.Println("Node listening on:", addr)
 
 	go n.handleChannels() // make node responsive
-	go n.handleConnections(ln)
+	go n.handleConnections()
 	return nil
 }
 
+func (n *Node) Stop() {
+	n.stop <- true
+}
+
 func (n *Node) handleChannels() {
-	select {
-	case msg := <-n.broadcast:
-		for p := range n.peers {
-			// encode the message and send
-			enc := p.encoder()
-			err := enc.Encode(msg) // Q a way to store encoded form instead of doing it every time?
-			if err != nil {
+	for {
+		select {
+		case msg := <-n.broadcast:
+			for p := range n.peers {
+				// encode the message and send
+				enc := p.encoder()
+				err := enc.Encode(msg) // Q a way to store encoded form instead of doing it every time?
+				if err != nil {
+				}
 			}
+		case p := <-n.add:
+			n.peers[p] = true
+		case <-n.stop:
+			log.Println("Stopping server")
+			n.ln.Close()
+			for p := range n.peers {
+				p.socket.Close()
+			}
+			break
 		}
-	case p := <-n.add:
-		n.peers[p] = true
 	}
 }
 
-func (n *Node) handleConnections(ln net.Listener) {
+func (n *Node) handleConnections() {
 	for {
-		conn, err := ln.Accept()
+		conn, err := n.ln.Accept()
 		if err != nil {
 			continue
 		}
