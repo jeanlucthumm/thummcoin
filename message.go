@@ -3,6 +3,11 @@ package main
 import (
 	"bytes"
 	"github.com/lunixbochs/struc"
+	"net"
+	"encoding/binary"
+	"fmt"
+	"bufio"
+	"strings"
 )
 
 const (
@@ -31,4 +36,45 @@ func (t *Transaction) MarshalBinary() ([]byte, error) {
 func (t *Transaction) UnmarshalBinary(data []byte) error {
 	buf := bytes.NewReader(data)
 	return struc.Unpack(buf, t)
+}
+
+type PeerList struct {
+	num  uint32
+	list []net.Addr
+}
+
+func (p *PeerList) MarshalBinary() ([]byte, error) {
+	buf := new(bytes.Buffer)
+	err := binary.Write(buf, binary.BigEndian, p.num)
+	if err != nil {
+		fmt.Println(err)
+		return nil, err
+	}
+	for _, addr := range p.list {
+		buf.Write([]byte(addr.String() + "\n"))
+	}
+	return buf.Bytes(), nil
+}
+
+func (p *PeerList) UnmarshalBinary(data []byte) error {
+	r := bytes.NewReader(data)
+	err := binary.Read(r, binary.BigEndian, &p.num)
+	if err != nil {
+		fmt.Println(err)
+		return err
+	}
+
+	buf := bufio.NewReader(r)
+	for i := uint32(0); i < p.num; i++ {
+		str, err := buf.ReadString('\n')
+		if err != nil {
+			return err
+		}
+		addr, err := net.ResolveTCPAddr("tcp", strings.Trim(str, "\n"))
+		if err != nil {
+			return err
+		}
+		p.list = append(p.list, addr)
+	}
+	return nil
 }
