@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"github.com/lunixbochs/struc"
 	"net"
 	"encoding/binary"
 	"fmt"
@@ -26,7 +25,7 @@ type Transaction struct {
 
 func (t *Transaction) MarshalBinary() ([]byte, error) {
 	buf := new(bytes.Buffer)
-	err := struc.Pack(buf, t)
+	err := binary.Write(buf, binary.BigEndian, t)
 	if err != nil {
 		return nil, err
 	}
@@ -35,7 +34,7 @@ func (t *Transaction) MarshalBinary() ([]byte, error) {
 
 func (t *Transaction) UnmarshalBinary(data []byte) error {
 	buf := bytes.NewReader(data)
-	return struc.Unpack(buf, t)
+	return binary.Read(buf, binary.BigEndian, t)
 }
 
 type PeerList struct {
