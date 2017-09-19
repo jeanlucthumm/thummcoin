@@ -1,4 +1,4 @@
-package main
+package node
 
 import (
 	"testing"
@@ -33,8 +33,8 @@ func TestPeerList_MarshalBinary(t *testing.T) {
 	addr2, _ := net.ResolveTCPAddr("tcp", ":8081")
 
 	p := PeerList{
-		num:  2,
-		list: []net.Addr{addr1, addr2},
+		Num:  2,
+		List: []net.Addr{addr1, addr2},
 	}
 
 	buf, err := p.MarshalBinary()
@@ -50,11 +50,11 @@ func TestPeerList_MarshalBinary(t *testing.T) {
 		t.Fail()
 	}
 
-	if p.num != o.num {
+	if p.Num != o.Num {
 		fmt.Println("count did not match")
 		t.Fail()
 	}
 
-	fmt.Println(p.list)
-	fmt.Println(o.list)
+	fmt.Println(p.List)
+	fmt.Println(o.List)
 }

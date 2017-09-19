@@ -1,4 +1,4 @@
-package main
+package node
 
 import (
 	"bytes"
@@ -8,6 +8,8 @@ import (
 	"bufio"
 	"strings"
 )
+
+// TODO move everything but essage to a protocol package
 
 const (
 	TRANS = 0x01
@@ -38,18 +40,18 @@ func (t *Transaction) UnmarshalBinary(data []byte) error {
 }
 
 type PeerList struct {
-	num  uint32
-	list []net.Addr
+	Num  uint32
+	List []net.Addr
 }
 
 func (p *PeerList) MarshalBinary() ([]byte, error) {
 	buf := new(bytes.Buffer)
-	err := binary.Write(buf, binary.BigEndian, p.num)
+	err := binary.Write(buf, binary.BigEndian, p.Num)
 	if err != nil {
 		fmt.Println(err)
 		return nil, err
 	}
-	for _, addr := range p.list {
+	for _, addr := range p.List {
 		buf.Write([]byte(addr.String() + "\n"))
 	}
 	return buf.Bytes(), nil
@@ -57,14 +59,14 @@ func (p *PeerList) MarshalBinary() ([]byte, error) {
 
 func (p *PeerList) UnmarshalBinary(data []byte) error {
 	r := bytes.NewReader(data)
-	err := binary.Read(r, binary.BigEndian, &p.num)
+	err := binary.Read(r, binary.BigEndian, &p.Num)
 	if err != nil {
 		fmt.Println(err)
 		return err
 	}
 
 	buf := bufio.NewReader(r)
-	for i := uint32(0); i < p.num; i++ {
+	for i := uint32(0); i < p.Num; i++ {
 		str, err := buf.ReadString('\n')
 		if err != nil {
 			return err
@@ -73,7 +75,7 @@ func (p *PeerList) UnmarshalBinary(data []byte) error {
 		if err != nil {
 			return err
 		}
-		p.list = append(p.list, addr)
+		p.List = append(p.List, addr)
 	}
 	return nil
 }
