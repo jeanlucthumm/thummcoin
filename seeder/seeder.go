@@ -3,11 +3,33 @@ package seeder
 import (
 	"net"
 	"log"
+	"github.com/jeanlucthumm/thummcoin/node"
 )
 
-var ips = []string {
+var ips = []string{
 	":8080",
 	":8081",
+}
+
+var peerList node.PeerList
+var peerBinary []byte
+
+func init() {
+	for _, ip := range ips {
+		addr, err := net.ResolveTCPAddr("tcp", ip)
+		if err != nil {
+			log.Println("Could not reolve tcp addr:", ip)
+			continue
+		}
+		peerList.List = append(peerList.List, addr)
+		peerList.Num++
+	}
+
+	var err error
+	peerBinary, err = peerList.MarshalBinary()
+	if err != nil {
+		log.Println("Could not marshal binary of peerList")
+	}
 }
 
 func Start(network string, loc string) error {
@@ -22,6 +44,7 @@ func Start(network string, loc string) error {
 		log.Fatalln("Could not start seeder:", err)
 		return err
 	}
+	log.Println("Seeder listening on:", addr.String())
 
 	for {
 		conn, err := ln.Accept()
@@ -34,5 +57,5 @@ func Start(network string, loc string) error {
 }
 
 func handleConnection(conn net.Conn) {
-
+	conn.Write(peerBinary)
 }
