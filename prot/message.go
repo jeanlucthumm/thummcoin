@@ -14,7 +14,7 @@ import (
 const (
 	TRANS = 0x01
 	PLIST = 0x02
-	PING = 0x03
+	PING  = 0x03
 )
 
 type Transaction struct {
@@ -81,6 +81,14 @@ func (p *PeerList) UnmarshalBinary(data []byte) error {
 type Ping struct {
 	From string
 	To   string
+}
+
+func NewPing(from, to string) Ping {
+	return Ping{From: from, To: to}
+}
+
+func (p *Ping) ValidateResponse(o Ping) bool {
+	return p.To == o.From && p.From == o.To
 }
 
 func (p *Ping) MarshalBinary() ([]byte, error) {

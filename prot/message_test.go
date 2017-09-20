@@ -83,3 +83,17 @@ func TestPing_MarshalBinary(t *testing.T) {
 		t.Fail()
 	}
 }
+
+func TestPing_ValidateResponse(t *testing.T) {
+	p := NewPing(":8080", ":8081")
+	o := NewPing(":8081", ":8080")
+	bad := NewPing(":200", ":8080")
+
+	if !p.ValidateResponse(o) {
+		t.Fail()
+	}
+
+	if p.ValidateResponse(bad) {
+		t.Fail()
+	}
+}
