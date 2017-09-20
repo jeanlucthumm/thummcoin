@@ -105,5 +105,7 @@ func (p *Ping) UnmarshalBinary(data []byte) error {
 	if err != nil {
 		return err
 	}
+	p.From = strings.TrimRight(p.From, "\n")
+	p.To = strings.TrimRight(p.To, "\n")
 	return nil
 }

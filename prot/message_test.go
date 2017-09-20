@@ -79,6 +79,7 @@ func TestPing_MarshalBinary(t *testing.T) {
 	}
 
 	if o != p {
+		fmt.Print("o:", o, "p:", p)
 		t.Fail()
 	}
 }

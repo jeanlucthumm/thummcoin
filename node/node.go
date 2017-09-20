@@ -5,9 +5,15 @@ import (
 	"log"
 	"fmt"
 	"encoding/gob"
+	"github.com/jeanlucthumm/thummcoin/seeder"
 )
 
 /// Node
+
+type message struct {
+	id   byte
+	data []byte
+}
 
 type Node struct {
 	peers map[*peer]bool // TODO use sync map
@@ -88,6 +94,20 @@ func (n *Node) handleConnections() {
 		peer := &peer{socket: conn}
 		go peer.Handle()
 	}
+}
+
+func (n *Node) discoverPeers() {
+	count := 0
+	for _, ip := range seeder.SeederIPs {
+		conn, err := net.Dial("tcp", ip)
+		if err != nil {
+			continue
+		}
+		p := &peer{socket: conn, node: n}
+		n.add <- p
+		count++
+	}
+	log.Println("Added", count, "peers")
 }
 
 /// peer
