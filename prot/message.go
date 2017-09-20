@@ -13,6 +13,8 @@ import (
 
 const (
 	TRANS = 0x01
+	PLIST = 0x02
+	PING = 0x03
 )
 
 type Transaction struct {
