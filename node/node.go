@@ -3,11 +3,11 @@ package node
 import (
 	"net"
 	"log"
-	"fmt"
 	"encoding/gob"
 	"github.com/jeanlucthumm/thummcoin/seeder"
 	"github.com/jeanlucthumm/thummcoin/prot"
 	"time"
+	"fmt"
 )
 
 /// Node
@@ -77,6 +77,9 @@ func (n *Node) handleChannels() {
 		case p := <-n.add:
 			log.Println("New peer:", p.socket.RemoteAddr())
 			n.peers[p] = true
+		case p := <-n.del:
+			log.Println("Deleting peer:", p.socket.RemoteAddr())
+			delete(n.peers, p)
 		case <-n.stop:
 			log.Println("Stopping server")
 			n.ln.Close()
@@ -96,8 +99,8 @@ func (n *Node) handleConnections() {
 		if err != nil {
 			continue
 		}
-		fmt.Println("New connection:", conn.RemoteAddr()) // DEBUG
-		peer := &peer{socket: conn}
+		log.Println("New connection:", conn.RemoteAddr()) // DEBUG
+		peer := &peer{socket: conn, node: n}
 		go peer.Handle()
 	}
 }
@@ -127,10 +130,13 @@ func (n *Node) discoverPeers() {
 		for _, addr := range plist.List {
 			go n.buddy(addr)
 		}
+		seed.Close()
 	}
 }
 
 func (n *Node) buddy(addr net.Addr) {
+	// FIXME make sure that you do not buddy with yourself
+
 	conn, err := net.Dial(addr.Network(), addr.String())
 	if err != nil {
 		return
@@ -144,6 +150,7 @@ func (n *Node) buddy(addr net.Addr) {
 	conn.SetReadDeadline(time.Now().Add(rtimeout))
 	_, err = conn.Read(buf)
 	if err != nil {
+		log.Println("Bad buddy:", addr)
 		conn.Close()
 		return
 	}
@@ -151,6 +158,7 @@ func (n *Node) buddy(addr net.Addr) {
 	var o prot.Ping
 	err = o.UnmarshalBinary(buf)
 	if err != nil || !ping.ValidateResponse(o) {
+		log.Println("Bad buddy:", addr)
 		conn.Close()
 		return
 	}
@@ -172,7 +180,9 @@ func (p *peer) Handle() {
 		msg := new(message)
 		err := dec.Decode(msg)
 		if err != nil {
-			fmt.Println("Could not read from peer:", p.socket.RemoteAddr(), err) // DEBUG
+			log.Printf("Could not read from peer %v: %v\n", p.socket.RemoteAddr(), err)
+			p.node.del <- p
+			break
 		}
 	}
 }
@@ -181,7 +191,7 @@ func (p *peer) Write(msg message) error {
 	enc := p.encoder()
 	err := enc.Encode(msg)
 	if err != nil {
-		fmt.Println("Could not write to peer:", p.socket.RemoteAddr(), err) // DEBUG
+		log.Println("Could not write to peer:", p.socket.RemoteAddr(), err) // DEBUG
 	}
 	return err
 }
