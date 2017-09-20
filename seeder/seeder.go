@@ -3,7 +3,7 @@ package seeder
 import (
 	"net"
 	"log"
-	"github.com/jeanlucthumm/thummcoin/node"
+	"github.com/jeanlucthumm/thummcoin/prot"
 )
 
 // SeederIPs holds the endpoints addresses of the seeders
@@ -16,7 +16,7 @@ var ips = []string{
 	":8081",
 }
 
-var peerList node.PeerList
+var peerList prot.PeerList
 var peerBinary []byte
 
 func init() {

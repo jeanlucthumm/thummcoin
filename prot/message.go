@@ -1,4 +1,4 @@
-package node
+package prot
 
 import (
 	"bytes"
@@ -14,11 +14,6 @@ import (
 const (
 	TRANS = 0x01
 )
-
-type message struct {
-	id   byte
-	data []byte
-}
 
 type Transaction struct {
 	Dest [4]byte
