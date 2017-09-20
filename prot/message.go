@@ -9,8 +9,6 @@ import (
 	"strings"
 )
 
-// TODO move everything but essage to a protocol package
-
 const (
 	TRANS = 0x01
 	PLIST = 0x02
