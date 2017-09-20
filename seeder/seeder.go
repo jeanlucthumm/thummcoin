@@ -6,6 +6,11 @@ import (
 	"github.com/jeanlucthumm/thummcoin/node"
 )
 
+// SeederIPs holds the endpoints addresses of the seeders
+var SeederIPs = []string{
+	":8090",
+}
+
 var ips = []string{
 	":8080",
 	":8081",
