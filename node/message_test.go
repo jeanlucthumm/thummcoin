@@ -58,3 +58,27 @@ func TestPeerList_MarshalBinary(t *testing.T) {
 	fmt.Println(p.List)
 	fmt.Println(o.List)
 }
+
+func TestPing_MarshalBinary(t *testing.T) {
+	p := Ping{
+		From: ":8080",
+		To:   ":8081",
+	}
+
+	buf, err := p.MarshalBinary()
+	if err != nil {
+		fmt.Println(err)
+		t.Fail()
+	}
+
+	var o Ping
+	err = o.UnmarshalBinary(buf)
+	if err != nil {
+		fmt.Println(err)
+		t.Fail()
+	}
+
+	if o != p {
+		t.Fail()
+	}
+}

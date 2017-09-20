@@ -40,7 +40,7 @@ func (t *Transaction) UnmarshalBinary(data []byte) error {
 }
 
 type PeerList struct {
-	Num  uint32
+	Num  uint32 // TODO make these private since they are linked
 	List []net.Addr
 }
 
@@ -76,6 +76,39 @@ func (p *PeerList) UnmarshalBinary(data []byte) error {
 			return err
 		}
 		p.List = append(p.List, addr)
+	}
+	return nil
+}
+
+// Ping is used to communicate the presence of nodes
+type Ping struct {
+	From string
+	To   string
+}
+
+func (p *Ping) MarshalBinary() ([]byte, error) {
+	buf := new(bytes.Buffer)
+	_, err := buf.Write([]byte(p.From + "\n"))
+	if err != nil {
+		return nil, err
+	}
+	_, err = buf.Write([]byte(p.To + "\n"))
+	if err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+func (p *Ping) UnmarshalBinary(data []byte) error {
+	buf := bufio.NewReader(bytes.NewReader(data))
+	var err error
+	p.From, err = buf.ReadString('\n')
+	if err != nil {
+		return err
+	}
+	p.To, err = buf.ReadString('\n')
+	if err != nil {
+		return err
 	}
 	return nil
 }
