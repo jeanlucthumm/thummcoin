@@ -14,6 +14,7 @@ var SeederIPs = []string{
 var ips = []string{
 	":8080",
 	":8081",
+	":8082",
 }
 
 var peerList prot.PeerList

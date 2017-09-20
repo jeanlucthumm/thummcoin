@@ -6,6 +6,8 @@ import (
 	"net"
 )
 
+// TODO use t.Log instead of fmt.Println
+
 func TestTransaction_MarshalBinary(t *testing.T) {
 	trans := Transaction{Amt: 22.3}
 	copy(trans.Dest[:], "abcd")

@@ -6,9 +6,16 @@ import (
 	"fmt"
 	"encoding/gob"
 	"github.com/jeanlucthumm/thummcoin/seeder"
+	"github.com/jeanlucthumm/thummcoin/prot"
+	"time"
 )
 
 /// Node
+
+const (
+	// time out for reading from other nodes
+	rtimeout = 20 * time.Second
+)
 
 type message struct {
 	id   byte
@@ -36,23 +43,20 @@ func NewNode() *Node {
 	}
 }
 
-func (n *Node) Start(network string, loc string) error {
+func (n *Node) Start(network string, loc string) {
 	addr, err := net.ResolveTCPAddr(network, loc)
 	if err != nil {
 		log.Fatalln("Could not start node:", err)
-		return err
 	}
 
 	n.ln, err = net.Listen(addr.Network(), addr.String())
 	if err != nil {
 		log.Fatalln("Could not start node:", err)
-		return err
 	}
-	log.Println("Node listening on:", addr)
 
 	go n.handleChannels() // make node responsive
-	go n.handleConnections()
-	return nil
+	go n.discoverPeers()
+	n.handleConnections()
 }
 
 func (n *Node) Stop() {
@@ -71,6 +75,7 @@ func (n *Node) handleChannels() {
 				}
 			}
 		case p := <-n.add:
+			log.Println("New peer:", p.socket.RemoteAddr())
 			n.peers[p] = true
 		case <-n.stop:
 			log.Println("Stopping server")
@@ -84,6 +89,7 @@ func (n *Node) handleChannels() {
 }
 
 func (n *Node) handleConnections() {
+	log.Println("Node listening on:", n.ln.Addr())
 	for {
 		// FIXME what if a peer reconnects?
 		conn, err := n.ln.Accept()
@@ -97,17 +103,60 @@ func (n *Node) handleConnections() {
 }
 
 func (n *Node) discoverPeers() {
-	count := 0
-	for _, ip := range seeder.SeederIPs {
-		conn, err := net.Dial("tcp", ip)
+	for _, seedIP := range seeder.SeederIPs {
+		seed, err := net.Dial("tcp", seedIP)
+		if err != nil {
+			log.Println("Dead seeder:", seedIP)
+			continue
+		}
+
+		pbuf := make([]byte, 4096) // FIXME we can't predict this size
+		seed.SetReadDeadline(time.Now().Add(rtimeout))
+		_, err = seed.Read(pbuf)
+		if err != nil {
+			log.Println("Bad seeder:", seedIP)
+			continue
+		}
+
+		var plist prot.PeerList
+		err = plist.UnmarshalBinary(pbuf)
 		if err != nil {
 			continue
 		}
-		p := &peer{socket: conn, node: n}
-		n.add <- p
-		count++
+
+		for _, addr := range plist.List {
+			go n.buddy(addr)
+		}
 	}
-	log.Println("Added", count, "peers")
+}
+
+func (n *Node) buddy(addr net.Addr) {
+	conn, err := net.Dial(addr.Network(), addr.String())
+	if err != nil {
+		return
+	}
+
+	ping := prot.NewPing(n.ln.Addr().String(), conn.RemoteAddr().String())
+	pingBuf, _ := ping.MarshalBinary()
+	conn.Write(pingBuf)
+
+	buf := make([]byte, 1024)
+	conn.SetReadDeadline(time.Now().Add(rtimeout))
+	_, err = conn.Read(buf)
+	if err != nil {
+		conn.Close()
+		return
+	}
+
+	var o prot.Ping
+	err = o.UnmarshalBinary(buf)
+	if err != nil || !ping.ValidateResponse(o) {
+		conn.Close()
+		return
+	}
+
+	p := &peer{socket: conn, node: n}
+	n.add <- p
 }
 
 /// peer
