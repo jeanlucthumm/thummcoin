@@ -3,209 +3,119 @@ package node
 import (
 	"net"
 	"log"
-	"encoding/gob"
-	"github.com/jeanlucthumm/thummcoin/seeder"
-	"github.com/jeanlucthumm/thummcoin/prot"
+	"sync"
 	"time"
-	"fmt"
 )
 
-/// Node
-
-const (
-	// time out for reading from other nodes
-	rtimeout = 20 * time.Second
-)
-
-type message struct {
-	id   byte
-	data []byte
-}
-
+// Node handles incoming connections and associated data
 type Node struct {
-	peers map[*peer]bool // TODO use sync map
-	ln    net.Listener
+	ln       net.Listener   // listens for incoming connections
+	ptable   map[*peer]bool // look up table for all known peers
+	tableMux sync.Mutex     // locks access to ptable
 
-	Broadcast chan *message
-	add       chan *peer
-	del       chan *peer
-	stop      chan bool
+	addPeer chan *peer
+	delPeer chan *peer
 }
 
+// peer represents a contactable peer
+type peer struct {
+	addr net.Addr
+}
+
+// NewNode initializes a new Node but does not start it
 func NewNode() *Node {
 	return &Node{
-		peers: make(map[*peer]bool),
-
-		Broadcast: make(chan *message),
-		add:       make(chan *peer),
-		del:       make(chan *peer),
-		stop:      make(chan bool),
+		addPeer: make(chan *peer, 10),
+		delPeer: make(chan *peer, 10),
 	}
 }
 
-func (n *Node) Start(network string, loc string) {
-	addr, err := net.ResolveTCPAddr(network, loc)
-	if err != nil {
-		log.Fatalln("Could not start node:", err)
-	}
+// Start starts Node on addr, enabling it to respond to other nodes
+func (n *Node) Start(addr net.Addr) error {
+	var err error
 
+	// instantiate listener
 	n.ln, err = net.Listen(addr.Network(), addr.String())
 	if err != nil {
-		log.Fatalln("Could not start node:", err)
+		return err
 	}
 
-	go n.handleChannels() // make node responsive
-	go n.discoverPeers()
-	n.handleConnections()
+	// make server responsive
+	go n.handleChannels()
+	go n.listen()
+	go n.pingLoop()
+	return nil
 }
 
-func (n *Node) Stop() {
-	n.stop <- true
+func (n *Node) listen() {
+	for {
+		conn, err := n.ln.Accept()
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+
+		go n.handleConnection(conn)
+	}
 }
 
 func (n *Node) handleChannels() {
 	for {
 		select {
-		case msg := <-n.Broadcast:
-			for p := range n.peers {
-				// encode the message and send
-				enc := p.encoder()
-				err := enc.Encode(msg) // Q a way to store encoded form instead of doing it every time?
-				if err != nil {
-				}
-			}
-		case p := <-n.add:
-			log.Println("New peer:", p.socket.RemoteAddr())
-			n.peers[p] = true
-		case p := <-n.del:
-			log.Println("Deleting peer:", p.socket.RemoteAddr())
-			delete(n.peers, p)
-		case <-n.stop:
-			log.Println("Stopping server")
-			n.ln.Close()
-			for p := range n.peers {
-				p.socket.Close()
-			}
-			break
+		case p := <-n.addPeer:
+			n.ptable[p] = true
+		case p := <-n.delPeer:
+			delete(n.ptable, p)
 		}
 	}
 }
 
-func (n *Node) handleConnections() {
-	log.Println("Node listening on:", n.ln.Addr())
+func (n *Node) handleConnection(conn net.Conn) {
+	// TODO consider setting a read deadline
+	var b []byte
+	num, err := conn.Read(b)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
+	log.Printf("From %s: %s\n", conn.RemoteAddr().String(), b[:num])
+}
+
+func (n *Node) pingLoop() {
 	for {
-		// FIXME what if a peer reconnects?
-		conn, err := n.ln.Accept()
-		if err != nil {
-			continue
-		}
-		log.Println("New connection:", conn.RemoteAddr()) // DEBUG
-		peer := &peer{socket: conn, node: n}
-		go peer.Handle()
+		log.Println("Pinging all peers")
+		n.pingAll()
+		time.Sleep(5 * time.Second)
 	}
 }
 
-func (n *Node) discoverPeers() {
-	for _, seedIP := range seeder.SeederIPs {
-		seed, err := net.Dial("tcp", seedIP)
-		if err != nil {
-			log.Println("Dead seeder:", seedIP)
-			continue
-		}
+func (n *Node) pingAll() {
+	// DEBUG
+	n.tableMux.Lock() // TODO this is a huge lockout, fix it
+	defer n.tableMux.Unlock()
 
-		pbuf := make([]byte, 4096) // FIXME we can't predict this size
-		seed.SetReadDeadline(time.Now().Add(rtimeout))
-		_, err = seed.Read(pbuf)
+	var delList []*peer
+	for p, _ := range n.ptable {
+		// attempt to dial
+		conn, err := net.Dial(p.addr.Network(), p.addr.String())
 		if err != nil {
-			log.Println("Bad seeder:", seedIP)
+			log.Println(err)
+			delList = append(delList, p)
 			continue
 		}
 
-		var plist prot.PeerList
-		err = plist.UnmarshalBinary(pbuf)
+		// attempt to write message
+		_, err = conn.Write([]byte("Hello there, peer!"))
 		if err != nil {
+			log.Println(err)
+			delList = append(delList, p)
 			continue
 		}
-
-		for _, addr := range plist.List {
-			go n.buddy(addr)
-		}
-		seed.Close()
-	}
-}
-
-func (n *Node) buddy(addr net.Addr) {
-	// FIXME make sure that you do not buddy with yourself
-
-	conn, err := net.Dial(addr.Network(), addr.String())
-	if err != nil {
-		return
 	}
 
-	ping := prot.NewPing(n.ln.Addr().String(), conn.RemoteAddr().String())
-	pingBuf, _ := ping.MarshalBinary()
-	conn.Write(pingBuf)
-
-	buf := make([]byte, 1024)
-	conn.SetReadDeadline(time.Now().Add(rtimeout))
-	_, err = conn.Read(buf)
-	if err != nil {
-		log.Println("Bad buddy:", addr)
-		conn.Close()
-		return
+	// remove bad peers
+	for _, d := range delList {
+		n.delPeer <- d
 	}
-
-	var o prot.Ping
-	err = o.UnmarshalBinary(buf)
-	if err != nil || !ping.ValidateResponse(o) {
-		log.Println("Bad buddy:", addr)
-		conn.Close()
-		return
-	}
-
-	p := &peer{socket: conn, node: n}
-	n.add <- p
-}
-
-/// peer
-
-type peer struct {
-	socket net.Conn
-	node   *Node
-}
-
-func (p *peer) Handle() {
-	dec := p.decoder()
-	for {
-		msg := new(message)
-		err := dec.Decode(msg)
-		if err != nil {
-			log.Printf("Could not read from peer %v: %v\n", p.socket.RemoteAddr(), err)
-			p.node.del <- p
-			break
-		}
-	}
-}
-
-func (p *peer) Write(msg message) error {
-	enc := p.encoder()
-	err := enc.Encode(msg)
-	if err != nil {
-		log.Println("Could not write to peer:", p.socket.RemoteAddr(), err) // DEBUG
-	}
-	return err
-}
-
-func (p *peer) encoder() *gob.Encoder {
-	// TODO store this as a field
-	return gob.NewEncoder(p.socket)
-}
-
-func (p *peer) decoder() *gob.Decoder {
-	// TODO store this as a field
-	return gob.NewDecoder(p.socket)
-}
-
-func (p *peer) end() {
-	p.socket.Close()
 }
