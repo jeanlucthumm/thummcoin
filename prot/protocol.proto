@@ -1,0 +1,15 @@
+syntax = "proto3";
+package prot;
+
+message Ping {
+    string from = 1;
+    string to = 2;
+}
+
+message PeerList {
+    message Peer {
+        string address = 1;
+    }
+
+    repeated Peer peers = 1;
+}
