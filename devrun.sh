@@ -3,4 +3,4 @@
 go get -d -v .
 go install -v .
 
-exec "app" "$@"
+exec "thummcoin" "$@"

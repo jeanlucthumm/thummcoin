@@ -5,12 +5,12 @@ services:
     image: thummcoin
     container_name: seed
     volumes:
-      - .:/go/src/app
-    command:
+      - .:/go/src/github.com/jeanlucthumm/thummcoin
+    command: --seed
   client:
     image: thummcoin
     depends_on:
       - seed
     volumes:
-      - .:/go/src/app
-    command:
+      - .:/go/src/github.com/jeanlucthumm/thummcoin
+    # command:
