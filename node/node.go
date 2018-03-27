@@ -47,6 +47,24 @@ func (n *Node) Start(addr net.Addr) error {
 	return nil
 }
 
+// Discover attempts to find nodes and connect to the network. Must be called after Start
+func (n *Node) Discover() {
+	// dial seed node
+	conn, err := net.Dial("tcp", "seed:8080")
+	if err != nil {
+		log.Fatal(err)
+		return
+	}
+
+	_, err = conn.Write([]byte("Hello seed"))
+	if err != nil {
+		log.Fatal(err)
+		return
+	}
+
+	n.addPeer <- &peer{addr: conn.RemoteAddr()}
+}
+
 func (n *Node) listen() {
 	for {
 		conn, err := n.ln.Accept()
@@ -96,7 +114,7 @@ func (n *Node) pingAll() {
 	defer n.tableMux.Unlock()
 
 	var delList []*peer
-	for p, _ := range n.ptable {
+	for p := range n.ptable {
 		// attempt to dial
 		conn, err := net.Dial(p.addr.Network(), p.addr.String())
 		if err != nil {
