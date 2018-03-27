@@ -7,6 +7,10 @@ import (
 	"time"
 )
 
+const (
+	p2pPort = 8080
+)
+
 // Node handles incoming connections and associated data
 type Node struct {
 	ln       net.Listener   // listens for incoming connections
@@ -19,7 +23,7 @@ type Node struct {
 
 // peer represents a contactable peer
 type peer struct {
-	addr net.Addr
+	addr net.TCPAddr
 }
 
 // NewNode initializes a new Node but does not start it
@@ -101,8 +105,6 @@ func (n *Node) Discover() {
 		log.Fatal(err)
 		return
 	}
-
-	n.addPeer <- &peer{addr: conn.RemoteAddr()}
 }
 
 func (n *Node) listen() {
@@ -134,7 +136,10 @@ func (n *Node) handleConnection(conn net.Conn) {
 
 	log.Printf("From %s: %s\n", conn.RemoteAddr().String(), b[:num])
 
-	n.addPeer <- &peer{addr: conn.RemoteAddr()}
+	if addr, ok := conn.RemoteAddr().(*net.TCPAddr); ok {
+		addr.Port = p2pPort
+		n.addPeer <- &peer{addr: *addr}
+	}
 }
 
 func (n *Node) pingLoop() {
