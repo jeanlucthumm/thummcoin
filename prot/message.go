@@ -12,7 +12,7 @@ const (
 
 type Message struct {
 	ID   int
-	data []byte
+	Data []byte
 }
 
 // Send encodes the message and writes it to w
