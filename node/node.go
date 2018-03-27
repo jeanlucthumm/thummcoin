@@ -17,8 +17,8 @@ type Node struct {
 	ptable   map[*peer]bool // look up table for all known peers
 	tableMux sync.Mutex     // locks access to ptable. do not use in conjunction with channels
 
-	addPeer chan *peer
-	delPeer chan *peer
+	addPeer chan *peer // adds a peer to ptable
+	delPeer chan *peer // remove a peer from ptable
 }
 
 // peer represents a contactable peer
