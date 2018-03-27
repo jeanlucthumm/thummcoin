@@ -4,6 +4,7 @@ import (
 	"github.com/jeanlucthumm/thummcoin/node"
 	"net"
 	"flag"
+	"log"
 )
 
 func main() {
@@ -12,9 +13,12 @@ func main() {
 
 	n := node.NewNode()
 	addr, _ := net.ResolveTCPAddr("tcp", ":8080")
-	n.Start(addr)
 
-	if !*seedMode {
-		n.Discover()
+	log.Println()
+
+	if *seedMode {
+		n.StartSeed(addr)
+	} else {
+		n.Start(addr)
 	}
 }

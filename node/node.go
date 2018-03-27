@@ -25,6 +25,7 @@ type peer struct {
 // NewNode initializes a new Node but does not start it
 func NewNode() *Node {
 	return &Node{
+		ptable:  make(map[*peer]bool),
 		addPeer: make(chan *peer, 10),
 		delPeer: make(chan *peer, 10),
 	}
@@ -43,12 +44,50 @@ func (n *Node) Start(addr net.Addr) error {
 
 	// make server responsive
 	go n.handleChannels()
-	go n.listen()
+	go n.Discover()
 	go n.pingLoop()
+
+	for {
+		conn, err := n.ln.Accept()
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+
+		go n.handleConnection(conn)
+	}
+
 	return nil
 }
 
-// Discover attempts to find nodes and connect to the network. Must be called after Start
+func (n *Node) StartSeed(addr net.Addr) error {
+	log.Println("Starting seed")
+	var err error
+
+	n.ln, err = net.Listen(addr.Network(), addr.String())
+	if err != nil {
+		return err
+	}
+
+	// make server responsive
+	go n.handleChannels()
+
+	for {
+		conn, err := n.ln.Accept()
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+
+		go n.handleConnection(conn)
+	}
+
+	return nil
+}
+
+// Discover attempts to find nodes and connect to the network. Must be called after Start.
+// It does not check for self-connection and automatically dials seed, so it should not be used
+// when in seed mode.
 func (n *Node) Discover() {
 	// dial seed node
 	conn, err := net.Dial("tcp", "seed:8080")
@@ -67,15 +106,6 @@ func (n *Node) Discover() {
 }
 
 func (n *Node) listen() {
-	for {
-		conn, err := n.ln.Accept()
-		if err != nil {
-			log.Println(err)
-			continue
-		}
-
-		go n.handleConnection(conn)
-	}
 }
 
 func (n *Node) handleChannels() {
@@ -95,7 +125,7 @@ func (n *Node) handleChannels() {
 
 func (n *Node) handleConnection(conn net.Conn) {
 	// TODO consider setting a read deadline
-	var b []byte
+	b := make([]byte, 4096)
 	num, err := conn.Read(b)
 	if err != nil {
 		log.Println(err)
