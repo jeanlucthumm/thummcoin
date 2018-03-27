@@ -1,0 +1,16 @@
+version: '3'
+
+services:
+  seed:
+    image: thummcoin
+    container_name: seed
+    volumes:
+      - .:/go/src/app
+    command:
+  client:
+    image: thummcoin
+    depends_on:
+      - seed
+    volumes:
+      - .:/go/src/app
+    command:
