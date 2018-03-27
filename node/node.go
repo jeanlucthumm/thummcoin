@@ -32,6 +32,7 @@ func NewNode() *Node {
 
 // Start starts Node on addr, enabling it to respond to other nodes
 func (n *Node) Start(addr net.Addr) error {
+	log.Println("Starting node")
 	var err error
 
 	// instantiate listener
@@ -98,6 +99,8 @@ func (n *Node) handleConnection(conn net.Conn) {
 	}
 
 	log.Printf("From %s: %s\n", conn.RemoteAddr().String(), b[:num])
+
+	n.addPeer <- &peer{addr: conn.RemoteAddr()}
 }
 
 func (n *Node) pingLoop() {
@@ -137,3 +140,7 @@ func (n *Node) pingAll() {
 		n.delPeer <- d
 	}
 }
+
+// TODO deal with how ping modifies the table
+
+
