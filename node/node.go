@@ -11,7 +11,7 @@ import (
 type Node struct {
 	ln       net.Listener   // listens for incoming connections
 	ptable   map[*peer]bool // look up table for all known peers
-	tableMux sync.Mutex     // locks access to ptable
+	tableMux sync.Mutex     // locks access to ptable. do not use in conjunction with channels
 
 	addPeer chan *peer
 	delPeer chan *peer
@@ -82,9 +82,13 @@ func (n *Node) handleChannels() {
 	for {
 		select {
 		case p := <-n.addPeer:
+			n.tableMux.Lock()
 			n.ptable[p] = true
+			n.tableMux.Unlock()
 		case p := <-n.delPeer:
+			n.tableMux.Lock()
 			delete(n.ptable, p)
+			n.tableMux.Unlock()
 		}
 	}
 }
@@ -112,17 +116,15 @@ func (n *Node) pingLoop() {
 }
 
 func (n *Node) pingAll() {
-	// DEBUG
-	n.tableMux.Lock() // TODO this is a huge lockout, fix it
+	n.tableMux.Lock()
 	defer n.tableMux.Unlock()
 
-	var delList []*peer
 	for p := range n.ptable {
 		// attempt to dial
 		conn, err := net.Dial(p.addr.Network(), p.addr.String())
 		if err != nil {
 			log.Println(err)
-			delList = append(delList, p)
+			delete(n.ptable, p)
 			continue
 		}
 
@@ -130,17 +132,8 @@ func (n *Node) pingAll() {
 		_, err = conn.Write([]byte("Hello there, peer!"))
 		if err != nil {
 			log.Println(err)
-			delList = append(delList, p)
+			delete(n.ptable, p)
 			continue
 		}
 	}
-
-	// remove bad peers
-	for _, d := range delList {
-		n.delPeer <- d
-	}
 }
-
-// TODO deal with how ping modifies the table
-
-
