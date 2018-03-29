@@ -2,100 +2,83 @@ package prot
 
 import (
 	"testing"
-	"fmt"
-	"net"
+	"bytes"
 )
 
-// TODO use t.Log instead of fmt.Println
-
-func TestTransaction_MarshalBinary(t *testing.T) {
-	trans := Transaction{Amt: 22.3}
-	copy(trans.Dest[:], "abcd")
-
-	buf, err := trans.MarshalBinary()
+func TestMakePingMessageAndDecode(t *testing.T) {
+	m, err := MakePingMessage("me", "you")
 	if err != nil {
-		fmt.Println(err)
+		t.Error(err)
+	}
+	if m.ID != PING {
 		t.Fail()
 	}
 
-	var o Transaction
-	err = o.UnmarshalBinary(buf)
+	ptemp, err := DecodeMessage(m)
 	if err != nil {
-		fmt.Println(err)
+		t.Error(err)
+	}
+	p, ok := ptemp.(*Ping)
+	if !ok {
 		t.Fail()
 	}
 
-	if trans != o {
+	if p.From != "me" || p.To != "you" {
 		t.Fail()
 	}
 }
 
-func TestPeerList_MarshalBinary(t *testing.T) {
-	addr1, _ := net.ResolveTCPAddr("tcp", ":8080")
-	addr2, _ := net.ResolveTCPAddr("tcp", ":8081")
-
-	p := PeerList{
-		Num:  2,
-		List: []net.Addr{addr1, addr2},
+func TestMakePeerListMessageAndDecode(t *testing.T) {
+	ips := []string{
+		"192.168.1.1",
+		"192.168.1.2",
+		"192.168.1.3",
 	}
 
-	buf, err := p.MarshalBinary()
+	m, err := MakePeerListMessage(ips)
 	if err != nil {
-		fmt.Println(err)
+		t.Error(err)
+	}
+	if m.ID != PLIST {
 		t.Fail()
 	}
 
-	var o PeerList
-	err = o.UnmarshalBinary(buf)
+	ptemp, err := DecodeMessage(m)
 	if err != nil {
-		fmt.Println(err)
+		t.Error(err)
+	}
+	p, ok := ptemp.(*PeerList)
+	if !ok {
 		t.Fail()
 	}
 
-	if p.Num != o.Num {
-		fmt.Println("count did not match")
-		t.Fail()
-	}
-
-	fmt.Println(p.List)
-	fmt.Println(o.List)
-}
-
-func TestPing_MarshalBinary(t *testing.T) {
-	p := Ping{
-		From: ":8080",
-		To:   ":8081",
-	}
-
-	buf, err := p.MarshalBinary()
-	if err != nil {
-		fmt.Println(err)
-		t.Fail()
-	}
-
-	var o Ping
-	err = o.UnmarshalBinary(buf)
-	if err != nil {
-		fmt.Println(err)
-		t.Fail()
-	}
-
-	if o != p {
-		fmt.Print("o:", o, "p:", p)
-		t.Fail()
+	for i, p := range p.Peers {
+		if p.Address != ips[i] {
+			t.Fail()
+		}
 	}
 }
 
-func TestPing_ValidateResponse(t *testing.T) {
-	p := NewPing(":8080", ":8081")
-	o := NewPing(":8081", ":8080")
-	bad := NewPing(":200", ":8080")
+func TestSendReceive(t *testing.T) {
+	ips := []string{
+		"192.168.1.1",
+		"192.168.1.2",
+		"192.168.1.3",
+	}
+	m, _ := MakePeerListMessage(ips)
 
-	if !p.ValidateResponse(o) {
-		t.Fail()
+	var buf bytes.Buffer
+	err := Send(&buf, m)
+	if err != nil {
+		t.Error(err)
 	}
 
-	if p.ValidateResponse(bad) {
+	mf, err := Receive(&buf)
+	if err != nil {
+		t.Error(err)
+	}
+
+	if bytes.Compare(m.Data, mf.Data) != 0 || m.ID != mf.ID {
 		t.Fail()
 	}
 }
