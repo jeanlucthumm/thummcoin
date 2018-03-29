@@ -25,7 +25,7 @@ func Send(w io.Writer, message *Message) error {
 
 // Receive reads from r and extracts a message
 func Receive(r io.Reader) (*Message, error) {
-	var m *Message
+	m := &Message{}
 	d := gob.NewDecoder(r)
 	err := d.Decode(m)
 	if err != nil {
