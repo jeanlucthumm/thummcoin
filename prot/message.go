@@ -4,6 +4,7 @@ import (
 	"io"
 	"encoding/gob"
 	"github.com/golang/protobuf/proto"
+	"errors"
 )
 
 const (
@@ -34,16 +35,26 @@ func Receive(r io.Reader) (*Message, error) {
 	}
 }
 
+// DecodeMessage converts m to a concrete message. The result is returned as an empty interface
+// and must be checked for type.
 func DecodeMessage(m *Message) (interface{}, error) {
 	switch m.ID {
 	case PING:
-
+		ping := &Ping{}
+		err := proto.Unmarshal(m.Data, ping)
+		return ping, err
+	case PLIST:
+		plist := &PeerList{}
+		err := proto.Unmarshal(m.Data, plist)
+		return plist, err
+	default:
+		return nil, errors.New("unknown message type")
 	}
 }
 
 // MakePeerListMessage constructs a peer list message from the given ips
 func MakePeerListMessage(ips []string) (*Message, error) {
-	m := &Message{}erm
+	m := &Message{}
 	pl := &PeerList{}
 
 	// populate peer list
