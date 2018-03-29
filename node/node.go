@@ -68,6 +68,7 @@ func (n *Node) StartSeed(addr net.Addr) error {
 	log.Println("Starting seed")
 	var err error
 
+	// instantiate listener
 	n.ln, err = net.Listen(addr.Network(), addr.String())
 	if err != nil {
 		return err
@@ -105,9 +106,6 @@ func (n *Node) Discover() {
 		log.Fatal(err)
 		return
 	}
-}
-
-func (n *Node) listen() {
 }
 
 func (n *Node) handleChannels() {
