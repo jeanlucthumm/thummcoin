@@ -5,6 +5,7 @@ import (
 	"encoding/gob"
 	"github.com/golang/protobuf/proto"
 	"errors"
+	"bytes"
 )
 
 const (
@@ -15,6 +16,10 @@ const (
 type Message struct {
 	ID   int
 	Data []byte
+}
+
+func (m *Message) Equal(o *Message) bool {
+	return o.ID == m.ID && bytes.Equal(o.Data, m.Data)
 }
 
 // Send encodes the message and writes it to w
