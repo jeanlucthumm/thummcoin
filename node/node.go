@@ -5,10 +5,13 @@ import (
 	"log"
 	"sync"
 	"time"
+	"github.com/jeanlucthumm/thummcoin/prot"
 )
 
 const (
 	p2pPort = 8080
+	readDeadline = 10	// read deadline in seconds for sockets
+	writeDeadline = 10	// write deadline in seconds for sockets
 )
 
 // Node handles incoming connections and associated data
@@ -98,13 +101,25 @@ func (n *Node) Discover() {
 	conn, err := net.Dial("tcp", "seed:8080")
 	if err != nil {
 		log.Fatal(err)
-		return
+	}
+
+	// ping seed
+	ping, err := prot.MakePingMessage("", conn.RemoteAddr().String())
+	if err != nil {
+		log.Fatal(err)
+	}
+	err = prot.Send(conn, ping)
+	if err != nil {
+		log.Fatal(err)
+	}
+	preply, err := prot.Receive(conn)
+	if err != nil {
+		log.Fatal(err)
 	}
 
 	_, err = conn.Write([]byte("Hello seed"))
 	if err != nil {
 		log.Fatal(err)
-		return
 	}
 }
 
