@@ -3,6 +3,7 @@ package prot
 import (
 	"testing"
 	"bytes"
+	"strings"
 )
 
 func TestMakePingMessageAndDecode(t *testing.T) {
@@ -65,10 +66,13 @@ func TestSendReceive(t *testing.T) {
 		"192.168.1.2",
 		"192.168.1.3",
 	}
-	m, _ := MakePeerListMessage(ips)
+	m, err := MakePeerListMessage(ips)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	var buf bytes.Buffer
-	err := Send(&buf, m)
+	err = Send(&buf, m)
 	if err != nil {
 		t.Error(err)
 	}
@@ -79,6 +83,12 @@ func TestSendReceive(t *testing.T) {
 	}
 
 	if bytes.Compare(m.Data, mf.Data) != 0 || m.ID != mf.ID {
+		t.Fail()
+	}
+
+	// bad cases
+	m, err = Receive(strings.NewReader("Hello World"))
+	if err == nil {
 		t.Fail()
 	}
 }
