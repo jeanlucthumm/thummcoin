@@ -12,13 +12,46 @@ const (
 	rwtimeout   = 2
 )
 
+// newServer creates a server listening on addr which processes connection through handler.
+// The server will send true on started once it is ready to accept connections and will
+// terminate execution if anything is received on done.
+func newServer(addr string, started, done chan bool, handler func(net.Conn) error) {
+	ln, err := net.Listen("tcp", testingAddr)
+	if err != nil {
+		fmt.Errorf("server could not listen")
+		return
+	}
+	defer ln.Close()
+	started <- true
+
+	for {
+		select {
+		case <-done:
+			return
+		default:
+			conn, err := ln.Accept()
+			if err != nil {
+				fmt.Errorf("server could not accept")
+				return
+			}
+
+			err = handler(conn)
+			if err != nil {
+				fmt.Errorf("server got error from handler: %v", err)
+				return
+			}
+
+			conn.Close()
+		}
+	}
+}
 
 func TestAwaitSend(t *testing.T) {
 	started := make(chan bool, 1)
 	done := make(chan bool, 1)
 
 	// server simply returns everything it's sent
-	go newServer(testingAddr, started, done, func(conn net.Conn)error {
+	go newServer(testingAddr, started, done, func(conn net.Conn) error {
 		for {
 			select {
 			case <-done:
@@ -59,36 +92,53 @@ func TestAwaitSend(t *testing.T) {
 	done <- true
 }
 
-// newServer creates a server listening on addr which processes connection through handler.
-// The server will send true on started once it is ready to accept connections and will
-// terminate execution if anything is received on done.
-func newServer(addr string, started, done chan bool, handler func(net.Conn)error) {
-	ln, err := net.Listen("tcp", testingAddr)
-	if err != nil {
-		fmt.Errorf("server could not listen")
-		return
-	}
-	defer ln.Close()
-	started <- true
+func TestPingExchange(t *testing.T) {
+	started := make(chan bool, 1)
+	done := make(chan bool, 1)
 
-	for {
-		select {
-		case <-done:
-			return
-		default:
-			conn, err := ln.Accept()
-			if err != nil {
-				fmt.Errorf("server could not accept")
-				return
-			}
-
-			err = handler(conn)
-			if err != nil {
-				fmt.Errorf("server got error from handler: %v", err)
-				return
-			}
-
-			conn.Close()
+	// server decodes ping and sends another valid one
+	go newServer(testingAddr, started, done, func(conn net.Conn) error {
+		// extract ping data
+		m, err := prot.Receive(conn)
+		if err != nil {
+			return err
 		}
+
+		pm, err := prot.DecodeMessage(m)
+		if err != nil {
+			return err
+		}
+
+		p, ok := pm.(*prot.Ping)
+		if !ok {
+			t.Log("server did not recieve proper ping data")
+			t.Fail()
+			return nil
+		}
+
+		// send reply
+		preply, err := prot.MakePingMessage(p.To, p.From)
+		if err != nil {
+			return err
+		}
+
+		err = prot.Send(conn, preply)
+		if err != nil {
+			return err
+		}
+
+		return nil
+	})
+
+	<-started
+	conn, err := net.Dial("tcp", testingAddr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+
+	err = pingExchange(conn, "me", "you")
+	if err != nil {
+		t.Error(err)
 	}
 }
