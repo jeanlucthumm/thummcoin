@@ -80,12 +80,8 @@ func MakePeerListMessage(ips []string) (*Message, error) {
 	}
 }
 
-// MakePingMessage constructs a ping message from the given parameters
-func MakePingMessage(from, to string) (*Message, error) {
+func MakePingMessage(p *Ping) (*Message, error){
 	m := &Message{}
-	p := &Ping{}
-	p.From = from
-	p.To = to
 
 	var err error
 	m.ID = PING

@@ -7,7 +7,7 @@ import (
 )
 
 func TestMakePingMessageAndDecode(t *testing.T) {
-	m, err := MakePingMessage("me", "you")
+	m, err := MakePingMessage(&Ping{From: "me", To: "you"})
 	if err != nil {
 		t.Error(err)
 	}
