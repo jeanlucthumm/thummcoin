@@ -5,9 +5,8 @@ import (
 	"log"
 	"sync"
 	"time"
-	"github.com/jeanlucthumm/thummcoin/prot"
+	_ "fmt"
 )
-
 const (
 	p2pPort = 8080
 	readDeadline = 10	// read deadline in seconds for sockets
@@ -97,30 +96,12 @@ func (n *Node) StartSeed(addr net.Addr) error {
 // It does not check for self-connection and automatically dials seed, so it should not be used
 // when in seed mode.
 func (n *Node) Discover() {
-	// dial seed node
-	conn, err := net.Dial("tcp", "seed:8080")
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	// ping seed
-	ping, err := prot.MakePingMessage("", conn.RemoteAddr().String())
-	if err != nil {
-		log.Fatal(err)
-	}
-	err = prot.Send(conn, ping)
-	if err != nil {
-		log.Fatal(err)
-	}
-	preply, err := prot.Receive(conn)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	_, err = conn.Write([]byte("Hello seed"))
-	if err != nil {
-		log.Fatal(err)
-	}
+	//conn, err := net.Dial("tcp", fmt.Sprintf("seed:%v", p2pPort))
+	//if err != nil {
+	//	return
+	//}
+	//
+	//err = pingExchange("req")
 }
 
 func (n *Node) handleChannels() {

@@ -16,7 +16,7 @@ const (
 // The server will send true on started once it is ready to accept connections and will
 // terminate execution if anything is received on done.
 func newServer(addr string, started, done chan bool, handler func(net.Conn) error) {
-	ln, err := net.Listen("tcp", testingAddr)
+	ln, err := net.Listen("tcp", addr)
 	if err != nil {
 		fmt.Errorf("server could not listen")
 		return
