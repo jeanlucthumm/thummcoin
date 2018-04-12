@@ -7,9 +7,9 @@ import (
 )
 
 // pingExchange sends a ping message along conn and waits for a ping reply.
-func pingExchange(conn net.Conn, from, to string) error {
+func pingExchange(conn net.Conn, p *prot.Ping) error {
 	// construct message and wait for reply
-	chal, err := prot.MakePingMessage(from, to)
+	chal, err := prot.MakePingMessage(p)
 	if err != nil {
 		return err
 	}
@@ -24,7 +24,7 @@ func pingExchange(conn net.Conn, from, to string) error {
 		return err
 	}
 	if r, ok := rt.(*prot.Ping); ok {
-		if r.From == to && r.To == from {
+		if r.From == p.To && r.To == p.From {
 			return nil
 		}
 	}

@@ -73,7 +73,7 @@ func TestAwaitSend(t *testing.T) {
 	})
 
 	<-started
-	m, err := prot.MakePingMessage("me", "you")
+	m, err := prot.MakePingMessage(&prot.Ping{From: "me", To: "you"})
 	conn, err := net.Dial("tcp", testingAddr)
 	if err != nil {
 		t.Fatal(err)
@@ -117,7 +117,7 @@ func TestPingExchange(t *testing.T) {
 		}
 
 		// send reply
-		preply, err := prot.MakePingMessage(p.To, p.From)
+		preply, err := prot.MakePingMessage(p)
 		if err != nil {
 			return err
 		}
@@ -137,7 +137,7 @@ func TestPingExchange(t *testing.T) {
 	}
 	defer conn.Close()
 
-	err = pingExchange(conn, "me", "you")
+	err = pingExchange(conn, &prot.Ping{From: "me", To: "you"})
 	if err != nil {
 		t.Error(err)
 	}
