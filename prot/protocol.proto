@@ -13,3 +13,7 @@ message PeerList {
 
     repeated Peer peers = 1;
 }
+
+message IPReq {
+    string ip = 1;
+}

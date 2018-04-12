@@ -11,6 +11,7 @@ import (
 const (
 	PING  = iota
 	PLIST
+	IPREQ
 )
 
 type Message struct {
