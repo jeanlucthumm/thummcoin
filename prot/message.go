@@ -93,3 +93,27 @@ func MakePingMessage(p *Ping) (*Message, error){
 		return m, nil
 	}
 }
+
+func MakeMessage(e interface{}) (*Message, error) {
+	m := &Message{}
+
+	switch e.(type) {
+	case Ping:
+		m.ID = PING
+	case PeerList:
+		m.ID = PLIST
+	case IPReq:
+		m.ID = IPREQ
+	default:
+		return nil, errors.New("could not make message of unknown type")
+	}
+
+	if e, ok := e.(proto.Message); ok {
+		var err error
+		m.Data, err = proto.Marshal(e)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return nil, errors.New("could not type cast to proto.Message to marshal")
+}

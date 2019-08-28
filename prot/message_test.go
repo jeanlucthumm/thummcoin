@@ -92,3 +92,33 @@ func TestSendReceive(t *testing.T) {
 		t.Fail()
 	}
 }
+
+func TestMakeMessage(t *testing.T) {
+	// PING
+	p := Ping{From: "me", To: "you"}
+	m, err := MakeMessage(p)
+	if err != nil {
+		t.Error(err)
+	}
+
+	r, err := DecodeMessage(m)
+	if err != nil {
+		t.Error(err)
+	}
+	if r, ok := r.(*Ping); ok {
+		if r.From != p.From || r.To != p.To {
+			t.Fail()
+		}
+	} else {
+		t.Fail()
+	}
+}
+
+func TestSample(t *testing.T) {
+	//p := Ping{From: "me", To: "you"}
+	//var i interface{}
+	//i = p
+	//if _, ok := i.(proto.Message); !ok {
+	//	t.Fail()
+	//}
+}

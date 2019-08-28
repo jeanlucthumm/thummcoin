@@ -1,10 +1,10 @@
 package main
 
 import (
-	"github.com/jeanlucthumm/thummcoin/node"
-	"net"
 	"flag"
+	"github.com/jeanlucthumm/thummcoin/node"
 	"log"
+	"net"
 )
 
 func main() {
@@ -17,8 +17,12 @@ func main() {
 	log.Println()
 
 	if *seedMode {
-		n.StartSeed(addr)
+		if err := n.StartSeed(addr); err != nil {
+
+		}
 	} else {
-		n.Start(addr)
+		if err := n.Start(addr); err != nil {
+			return
+		}
 	}
 }

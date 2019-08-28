@@ -1,16 +1,19 @@
 package node
 
 import (
-	"net"
+	"fmt"
+	_ "fmt"
+	"github.com/pkg/errors"
 	"log"
+	"net"
 	"sync"
 	"time"
-	_ "fmt"
 )
+
 const (
-	p2pPort = 8080
-	readDeadline = 10	// read deadline in seconds for sockets
-	writeDeadline = 10	// write deadline in seconds for sockets
+	p2pPort       = 8080
+	readDeadline  = 10 // read deadline in seconds for sockets
+	writeDeadline = 10 // write deadline in seconds for sockets
 )
 
 // Node handles incoming connections and associated data
@@ -45,7 +48,7 @@ func (n *Node) Start(addr net.Addr) error {
 	// instantiate listener
 	n.ln, err = net.Listen(addr.Network(), addr.String())
 	if err != nil {
-		return err
+		return errors.Wrap(err, "listen failed on node startup")
 	}
 
 	// make server responsive
@@ -73,7 +76,7 @@ func (n *Node) StartSeed(addr net.Addr) error {
 	// instantiate listener
 	n.ln, err = net.Listen(addr.Network(), addr.String())
 	if err != nil {
-		return err
+		return errors.Wrap(err, "listen failed on node startup")
 	}
 
 	// make server responsive
@@ -96,12 +99,19 @@ func (n *Node) StartSeed(addr net.Addr) error {
 // It does not check for self-connection and automatically dials seed, so it should not be used
 // when in seed mode.
 func (n *Node) Discover() {
-	//conn, err := net.Dial("tcp", fmt.Sprintf("seed:%v", p2pPort))
-	//if err != nil {
-	//	return
-	//}
-	//
-	//err = pingExchange("req")
+	// Dial the seed
+	seedAddress := fmt.Sprintf("seed:%v", p2pPort)
+	conn, err := net.Dial("tcp", seedAddress)
+	if err != nil {
+		log.Printf("Failed to dial seed at %s\n", seedAddress)
+		return
+	}
+
+	// Test hello message
+	if _, err := conn.Write([]byte("Hello there seed!")); err != nil {
+		log.Println(errors.Wrap(err, "failed to ping seed").Error())
+		return
+	}
 }
 
 func (n *Node) handleChannels() {
@@ -124,7 +134,7 @@ func (n *Node) handleConnection(conn net.Conn) {
 	b := make([]byte, 4096)
 	num, err := conn.Read(b)
 	if err != nil {
-		log.Println(err)
+		log.Printf("Failed read from %s: %s\n", conn.RemoteAddr().String(), err.Error())
 		return
 	}
 
@@ -152,7 +162,7 @@ func (n *Node) pingAll() {
 		// attempt to dial
 		conn, err := net.Dial(p.addr.Network(), p.addr.String())
 		if err != nil {
-			log.Println(err)
+			log.Printf("Failed ping to %s: %s\n", p.addr.String(), err.Error())
 			delete(n.ptable, p)
 			continue
 		}
@@ -160,7 +170,7 @@ func (n *Node) pingAll() {
 		// attempt to write message
 		_, err = conn.Write([]byte("Hello there, peer!"))
 		if err != nil {
-			log.Println(err)
+			log.Printf("Failed ping write to %s: %s\n", p.addr.String(), err.Error())
 			delete(n.ptable, p)
 			continue
 		}
