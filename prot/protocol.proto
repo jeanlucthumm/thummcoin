@@ -1,9 +1,25 @@
 syntax = "proto3";
 package prot;
 
-message Ping {
-    string from = 1;
-    string to = 2;
+enum Type {
+    PING = 0;
+    REQ = 1;
+    PEER_LIST = 2;
+}
+
+message Message {
+    Type type = 1;
+    string from = 2;
+    string to = 3;
+    // 2 - 10 reserved for inner protocol
+    bytes data = 11;
+}
+
+message Request {
+    enum Type {
+        PEER_LIST = 0;
+    }
+    Request.Type type = 1;
 }
 
 message PeerList {
@@ -12,8 +28,4 @@ message PeerList {
     }
 
     repeated Peer peers = 1;
-}
-
-message IPReq {
-    string ip = 1;
 }

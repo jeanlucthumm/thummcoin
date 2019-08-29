@@ -1,43 +1,75 @@
 package node
 
 import (
-	"net"
+	"github.com/golang/protobuf/proto"
 	"github.com/jeanlucthumm/thummcoin/prot"
-	"time"
+	"github.com/pkg/errors"
+	"log"
+	"net"
 )
 
-// pingExchange sends a ping message along conn and waits for a ping reply.
-func pingExchange(conn net.Conn, p *prot.Ping) error {
-	// construct message and wait for reply
-	chal, err := prot.MakePingMessage(p)
+// transmission.go contains helper and handlers for different types of sent and received messages
+
+func (n *Node) handleRequest(conn net.Conn, data []byte) error {
+	// recover request
+	req := &prot.Request{}
+	err := proto.Unmarshal(data, req)
 	if err != nil {
-		return err
-	}
-	rm, err := sendAwait(conn, chal)
-	if err != nil {
-		return err
+		return errors.Wrap(err, "unmarshal request")
 	}
 
-	// check reply
-	rt, err := prot.DecodeMessage(rm)
-	if err != nil {
-		return err
-	}
-	if r, ok := rt.(*prot.Ping); ok {
-		if r.From == p.To && r.To == p.From {
-			return nil
+	log.Println(conn.RemoteAddr().String()) // DEBUG
+
+	// identify request type and construct response data
+	var dType prot.Type
+	var buf []byte
+	switch req.Type {
+	case prot.Request_PEER_LIST:
+		buf, err = n.makePeerList();
+		if err != nil {
+			return errors.Wrap(err, "make peer list")
 		}
+		dType = prot.Type_PEER_LIST
+	default:
+		return errors.New("unknown request type")
 	}
-	return err
+
+	// wrap data in message and send
+	m := &prot.Message{
+		Type: dType,
+		From: n.ln.Addr().String(),
+		To:   conn.RemoteAddr().String(),
+		Data: buf,
+	}
+
+	mBuf, err := proto.Marshal(m)
+	if err != nil {
+		return errors.Wrap(err, "marshal message")
+	}
+	_, err = conn.Write(mBuf)
+	if err != nil {
+		return errors.Wrap(err, "transmit message")
+	}
+	return nil
 }
 
-// sendAwait sends a message along conn and returns the reply
-func sendAwait(conn net.Conn, m *prot.Message) (*prot.Message, error) {
-	conn.SetDeadline(time.Now().Add(2 * time.Second))
-	if err := prot.Send(conn, m); err != nil {
-		return nil, err
+func (n *Node) makePeerList() ([]byte, error) {
+	var ipList []string
+	n.tableMux.Lock()
+	for p := range n.ptable {
+		ipList = append(ipList, p.addr.IP.String())
 	}
-	conn.SetDeadline(time.Now().Add(2 * time.Second))
-	reply, err := prot.Receive(conn)
-	return reply, err
+	n.tableMux.Unlock()
+
+	pl := &prot.PeerList{}
+	for _, ip := range ipList {
+		p := &prot.PeerList_Peer{Address: ip}
+		pl.Peers = append(pl.Peers, p)
+	}
+
+	buf, err := proto.Marshal(pl)
+	if err != nil {
+		return nil, errors.Wrap(err, "marshal peer list")
+	}
+	return buf, nil
 }

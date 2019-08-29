@@ -3,6 +3,8 @@ package node
 import (
 	"fmt"
 	_ "fmt"
+	"github.com/golang/protobuf/proto"
+	"github.com/jeanlucthumm/thummcoin/prot"
 	"github.com/pkg/errors"
 	"log"
 	"net"
@@ -14,6 +16,8 @@ const (
 	p2pPort       = 8080
 	readDeadline  = 10 // read deadline in seconds for sockets
 	writeDeadline = 10 // write deadline in seconds for sockets
+
+	readBufferSize = 4096 // size of read buffer for incoming connections in bytes
 )
 
 // Node handles incoming connections and associated data
@@ -99,7 +103,7 @@ func (n *Node) StartSeed(addr net.Addr) error {
 // It does not check for self-connection and automatically dials seed, so it should not be used
 // when in seed mode.
 func (n *Node) Discover() {
-	// Dial the seed
+	// dial the seed
 	seedAddress := fmt.Sprintf("seed:%v", p2pPort)
 	conn, err := net.Dial("tcp", seedAddress)
 	if err != nil {
@@ -107,12 +111,36 @@ func (n *Node) Discover() {
 		return
 	}
 
-	// Test hello message
-	if _, err := conn.Write([]byte("Hello there seed!")); err != nil {
-		log.Println(errors.Wrap(err, "failed to ping seed").Error())
-		return
+	// request peer list
+	req := &prot.Request{Type: prot.Request_PEER_LIST}
+	buf, err := proto.Marshal(req);
+	if err != nil {
+		log.Printf("Failed to marshal request during discovery: %s\n", err.Error())
 	}
+	m := &prot.Message{
+		Type: prot.Type_REQ,
+		From: n.ln.Addr().String(),
+		To:   "seed",
+		Data: buf,
+	}
+	mBuf, err := proto.Marshal(m);
+	if err != nil {
+		log.Printf("Failed to marshal message during discovery: %s\n", err.Error())
+	}
+	if _, err = conn.Write(mBuf); err != nil {
+		log.Printf("Failed to write request to seed: %s\n", err.Error())
+	}
+
+	// Wait for response
+	num, err := conn.Read(buf)
+	if err != nil {
+		log.Printf("Failed to read back from seed during discovery: %s\n", err)
+	}
+	log.Printf("Read %d bytes from seed\n", num)
 }
+
+// TODO the port num is changed. need to keep session alive as we wait for response in client.
+// 		Other option is to only do stateless communication, but that defeats the point of TCP
 
 func (n *Node) handleChannels() {
 	for {
@@ -131,18 +159,37 @@ func (n *Node) handleChannels() {
 
 func (n *Node) handleConnection(conn net.Conn) {
 	// TODO consider setting a read deadline
-	b := make([]byte, 4096)
+	remoteAddr := conn.RemoteAddr().String()
+	b := make([]byte, readBufferSize) // FIXME messages can be much larger than that
 	num, err := conn.Read(b)
 	if err != nil {
-		log.Printf("Failed read from %s: %s\n", conn.RemoteAddr().String(), err.Error())
+		log.Printf("Failed read from %s: %s\n", remoteAddr)
 		return
 	}
 
-	log.Printf("From %s: %s\n", conn.RemoteAddr().String(), b[:num])
+	log.Printf("Read %d bytes from %s\n", num, remoteAddr)
 
+	// register this peer
 	if addr, ok := conn.RemoteAddr().(*net.TCPAddr); ok {
-		addr.Port = p2pPort
-		n.addPeer <- &peer{addr: *addr}
+		addrCopy := *addr
+		addrCopy.Port = p2pPort
+		n.addPeer <- &peer{addr: addrCopy}
+	}
+
+	// route message
+	msg := &prot.Message{}
+	if err := proto.Unmarshal(b[:num], msg); err != nil {
+		log.Printf("Failed to unmarshal message: %s\n", err)
+	}
+
+	switch msg.Type {
+	case prot.Type_REQ:
+		log.Println("Got request")
+		if err := n.handleRequest(conn, msg.Data); err != nil {
+			log.Printf("Failed to handle request from %s: %s\n", remoteAddr, err)
+		}
+	case prot.Type_PEER_LIST:
+		log.Println("Got peer list")
 	}
 }
 
@@ -157,12 +204,13 @@ func (n *Node) pingLoop() {
 func (n *Node) pingAll() {
 	n.tableMux.Lock()
 	defer n.tableMux.Unlock()
+	// FIXME this mux locks the table for too long. Get a copy of all IPs instead
 
 	for p := range n.ptable {
 		// attempt to dial
 		conn, err := net.Dial(p.addr.Network(), p.addr.String())
 		if err != nil {
-			log.Printf("Failed ping to %s: %s\n", p.addr.String(), err.Error())
+			log.Printf("Failed ping to %s: %s\n", p.addr.String(), err)
 			delete(n.ptable, p)
 			continue
 		}
@@ -170,7 +218,7 @@ func (n *Node) pingAll() {
 		// attempt to write message
 		_, err = conn.Write([]byte("Hello there, peer!"))
 		if err != nil {
-			log.Printf("Failed ping write to %s: %s\n", p.addr.String(), err.Error())
+			log.Printf("Failed ping write to %s: %s\n", p.addr.String(), err)
 			delete(n.ptable, p)
 			continue
 		}
