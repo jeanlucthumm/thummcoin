@@ -18,14 +18,12 @@ func (n *Node) handleRequest(conn net.Conn, data []byte) error {
 		return errors.Wrap(err, "unmarshal request")
 	}
 
-	log.Println(conn.RemoteAddr().String()) // DEBUG
-
 	// identify request type and construct response data
 	var dType prot.Type
 	var buf []byte
 	switch req.Type {
 	case prot.Request_PEER_LIST:
-		buf, err = n.makePeerList();
+		buf, err = n.makePeerList()
 		if err != nil {
 			return errors.Wrap(err, "make peer list")
 		}
@@ -54,16 +52,11 @@ func (n *Node) handleRequest(conn net.Conn, data []byte) error {
 }
 
 func (n *Node) makePeerList() ([]byte, error) {
-	var ipList []string
-	n.tableMux.Lock()
-	for p := range n.ptable {
-		ipList = append(ipList, p.addr.IP.String())
-	}
-	n.tableMux.Unlock()
+	addrList := n.peerList.getAddresses()
 
 	pl := &prot.PeerList{}
-	for _, ip := range ipList {
-		p := &prot.PeerList_Peer{Address: ip}
+	for _, ad := range addrList {
+		p := &prot.PeerList_Peer{Address: ad.String()}
 		pl.Peers = append(pl.Peers, p)
 	}
 
