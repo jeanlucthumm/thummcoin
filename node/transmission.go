@@ -3,6 +3,7 @@ package node
 import (
 	"github.com/golang/protobuf/proto"
 	"github.com/jeanlucthumm/thummcoin/prot"
+	"github.com/jeanlucthumm/thummcoin/util"
 	"github.com/pkg/errors"
 	"log"
 	"net"
@@ -47,6 +48,24 @@ func (n *Node) handleRequest(conn net.Conn, data []byte) error {
 	}
 
 	return nil
+}
+
+func (n *Node) processPeerList(data []byte) {
+	pl := &prot.PeerList{}
+	err := proto.Unmarshal(data, pl)
+	if err != nil {
+		log.Printf("Failed to unmarshal peer list: %s\n", err)
+		return
+	}
+	for _, p := range pl.Peers {
+		ip, err := net.ResolveIPAddr("ip", p.Address)
+		if err != nil {
+			log.Printf("Failed to resolve ip address %s from peer list: %s\n", p.Address, err)
+		}
+		if util.IPEqual(*ip, n.ip) {
+			continue
+		}
+	}
 }
 
 func (n *Node) makePeerList() ([]byte, error) {

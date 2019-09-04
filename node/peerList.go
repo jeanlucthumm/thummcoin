@@ -3,6 +3,7 @@ package node
 import (
 	"github.com/golang/protobuf/proto"
 	"github.com/jeanlucthumm/thummcoin/prot"
+	"github.com/jeanlucthumm/thummcoin/util"
 	"log"
 	"net"
 	"sync"
@@ -18,23 +19,23 @@ type peerList struct {
 	list []*peer
 	node *Node
 
-	newPeer chan net.IP
+	newPeer chan net.IPAddr
 	stop    chan bool
 }
 
 type peer struct {
-	addr net.IP
+	addr net.IPAddr
 }
 
 func newPeerList(node *Node) *peerList {
 	return &peerList{
 		node:    node,
-		newPeer: make(chan net.IP, peerBufferCap),
+		newPeer: make(chan net.IPAddr, peerBufferCap),
 		stop:    make(chan bool),
 	}
 }
 
-func newPeer(addr net.IP) *peer {
+func newPeer(addr net.IPAddr) *peer {
 	return &peer{
 		addr: addr,
 	}
@@ -55,7 +56,7 @@ func (pl *peerList) handleChannels() {
 	}
 }
 
-func (pl *peerList) handleNewPeer(addr net.IP) {
+func (pl *peerList) handleNewPeer(addr net.IPAddr) {
 	if pl.addAddrIfNew(addr) {
 		// broadcast new peer to everyone
 		p := &prot.PeerList_Peer{Address: addr.String()}
@@ -72,13 +73,13 @@ func (pl *peerList) handleNewPeer(addr net.IP) {
 	}
 }
 
-func (pl *peerList) addAddrIfNew(addr net.IP) bool {
+func (pl *peerList) addAddrIfNew(addr net.IPAddr) bool {
 	pl.mux.Lock()
 	defer pl.mux.Unlock()
 
 	newAd := true
 	for _, p := range pl.list {
-		if addr.Equal(p.addr) {
+		if util.IPEqual(addr, p.addr) {
 			newAd = false
 		}
 	}
@@ -89,10 +90,10 @@ func (pl *peerList) addAddrIfNew(addr net.IP) bool {
 	return newAd
 }
 
-func (pl *peerList) getAddresses() []net.IP {
+func (pl *peerList) getAddresses() []net.IPAddr {
 	pl.mux.Lock()
 	defer pl.mux.Unlock()
-	list := make([]net.IP, len(pl.list))
+	list := make([]net.IPAddr, len(pl.list))
 	for i, p := range pl.list {
 		list[i] = p.addr
 	}

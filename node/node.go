@@ -179,7 +179,7 @@ func (n *Node) handleConnection(conn net.Conn) {
 
 		// register this peer
 		if addr, ok := conn.RemoteAddr().(*net.TCPAddr); ok {
-			n.peerList.newPeer <- addr.IP
+			n.peerList.newPeer <- util.IPFromTCP(*addr)
 		}
 
 		// route message
@@ -198,7 +198,7 @@ func (n *Node) handleConnection(conn net.Conn) {
 			// Seeds ignore peer lists
 			if !n.seed {
 				log.Printf("Got peer list from %s\n", remoteAddr)
-				return
+
 			}
 		}
 	}
@@ -208,7 +208,7 @@ func (n *Node) broadcast(msg *message) {
 	addrList := n.peerList.getAddresses()
 
 	for _, ad := range addrList {
-		conn, err := net.Dial("tcp", util.IPString(ad, p2pPort))
+		conn, err := net.Dial("tcp", util.IPDialString(ad, p2pPort))
 		if err != nil {
 			log.Printf("Failed to dial %s during broadcast\n", ad)
 			continue
