@@ -1,7 +1,6 @@
 package node
 
 import (
-	"fmt"
 	_ "fmt"
 	"github.com/golang/protobuf/proto"
 	"github.com/jeanlucthumm/thummcoin/prot"
@@ -9,13 +8,13 @@ import (
 	"github.com/pkg/errors"
 	"log"
 	"net"
+	"strconv"
+	"time"
 )
 
 const (
-	p2pPort       = 8080
-	readDeadline  = 10 // read deadline in seconds for sockets
-	writeDeadline = 10 // write deadline in seconds for sockets
-
+	p2pPort        = 8080
+	ioTimeout      = time.Second * 2
 	readBufferSize = 4096 // size of read buffer for incoming connections in bytes
 )
 
@@ -23,26 +22,29 @@ const (
 type Node struct {
 	ln       net.Listener // listens for incoming connections
 	peerList *peerList
+	seed     bool
+	ip       net.IPAddr
 
-	broadcastChan chan []byte
+	broadcastChan chan *message
 }
 
-// peer represents a contactable peer
-type Peer struct {
-	addr net.IP
+type message struct {
+	kind prot.Type
+	data []byte
 }
 
 // NewNode initializes a new Node but does not start it
-func NewNode() *Node {
-	return &Node{
-		peerList:      newPeerList(),
-		broadcastChan: make(chan []byte),
+func NewNode(seed bool) *Node {
+	n := &Node{
+		seed:          seed,
+		broadcastChan: make(chan *message),
 	}
+	n.peerList = newPeerList(n)
+	return n
 }
 
 // Start starts Node on addr, enabling it to respond to other nodes
 func (n *Node) Start(addr net.Addr) error {
-	log.Println("Starting node")
 	var err error
 
 	// instantiate listener
@@ -54,7 +56,9 @@ func (n *Node) Start(addr net.Addr) error {
 	// make server responsive
 	n.peerList.start()
 	go n.handleChannels()
-	go n.Discover()
+	if !n.seed {
+		go n.discover()
+	}
 
 	for {
 		conn, err := n.ln.Accept()
@@ -67,74 +71,75 @@ func (n *Node) Start(addr net.Addr) error {
 	}
 }
 
-func (n *Node) StartSeed(addr net.Addr) error {
-	log.Println("Starting seed")
-	var err error
-
-	// instantiate listener
-	n.ln, err = net.Listen(addr.Network(), addr.String())
-	if err != nil {
-		return errors.Wrap(err, "listen failed on node startup")
-	}
-
-	// make server responsive
-	go n.handleChannels()
-
-	for {
-		conn, err := n.ln.Accept()
-		if err != nil {
-			log.Println(err)
-			continue
-		}
-
-		go n.handleConnection(conn)
-	}
-}
-
-// Discover attempts to find nodes and connect to the network. Must be called after Start.
+// discover attempts to find nodes and connect to the network. Must be called after Start.
 // It does not check for self-connection and automatically dials seed, so it should not be used
 // when in seed mode.
-func (n *Node) Discover() {
-	// dial the seed
-	seedAddress := fmt.Sprintf("seed:%v", p2pPort)
-	conn, err := net.Dial("tcp", seedAddress)
+func (n *Node) discover() {
+	// resolve seed
+	conn, err := net.Dial("tcp", "seed:"+strconv.Itoa(p2pPort))
 	if err != nil {
-		log.Printf("Failed to dial seed at %s\n", seedAddress)
+		log.Println("Failed to resolve seed host name")
 		return
 	}
 
+	// identify IP
+	reqIp := &prot.Request{Type: prot.Request_IP_SELF}
+	riBuf, err := proto.Marshal(reqIp)
+	if err != nil {
+		log.Printf("Failed to marshal ip request during discovery: %s\n", err)
+		return
+	}
+	mi := &message{
+		kind: prot.Type_REQ,
+		data: riBuf,
+	}
+	err = n.sendMessage(mi, conn)
+	if err != nil {
+		log.Printf("Failed to send ip req to seed: %s\n", err)
+		return
+	}
+
+	ipPl := &prot.PeerList{}
+	err = n.recvMessage(conn, ipPl)
+	if err != nil {
+		log.Printf("Failed to receive ip from seed: %s\n", err)
+		return
+	}
+	if len(ipPl.Peers) == 0 {
+		log.Println("Invalid self ip response from seed: peer list is empty")
+		return
+	}
+	ip, err := net.ResolveIPAddr("ip", ipPl.Peers[0].Address)
+	if err != nil {
+		log.Printf("Failed to resolve ip response addr: %s\n", err)
+		return
+	}
+	n.ip = *ip
+
+	log.Printf("Self-identified as %s\n", n.ip.String())
+
 	// request peer list
-	req := &prot.Request{Type: prot.Request_PEER_LIST}
-	rBuf, err := proto.Marshal(req)
+	reqPl := &prot.Request{Type: prot.Request_PEER_LIST}
+	rplBuf, err := proto.Marshal(reqPl)
 	if err != nil {
-		log.Printf("Failed to marshal request during discovery: %s\n", err.Error())
+		log.Printf("Failed to marshal peer list req during discovery: %s\n", err)
+		return
 	}
-	m := &prot.Message{
-		Type: prot.Type_REQ,
-		From: n.ln.Addr().String(),
-		To:   "seed",
-		Data: rBuf,
+	mpl := &message{
+		kind: prot.Type_REQ,
+		data: rplBuf,
 	}
-	mBuf, err := proto.Marshal(m)
+	err = n.sendMessage(mpl, conn)
 	if err != nil {
-		log.Printf("Failed to marshal message during discovery: %s\n", err.Error())
-	}
-	if _, err = conn.Write(mBuf); err != nil {
-		log.Printf("Failed to write request to seed: %s\n", err.Error())
+		log.Printf("Failed to send peer list request to seed: %s\n", err)
+		return
 	}
 
-	// wait for response
-	buf := make([]byte, readBufferSize)
-	num, err := conn.Read(buf)
-	if err != nil {
-		log.Printf("Failed to read back from seed during discovery: %s\n", err)
-	}
-
-	// decode and all known peers
 	pl := &prot.PeerList{}
-	err = proto.Unmarshal(buf[:num], pl)
+	err = n.recvMessage(conn, pl)
 	if err != nil {
-		log.Printf("Failed to unmarshal peer list from seed: %s\n", err)
+		log.Printf("Failed to receive peer list from seed: %s\n", err)
+		return
 	}
 
 	for _, peer := range pl.Peers {
@@ -161,8 +166,6 @@ func (n *Node) handleConnection(conn net.Conn) {
 		return
 	}
 
-	log.Printf("Read %d bytes from %s\n", num, remoteAddr)
-
 	// register this peer
 	if addr, ok := conn.RemoteAddr().(*net.TCPAddr); ok {
 		n.peerList.newPeer <- addr.IP
@@ -176,29 +179,32 @@ func (n *Node) handleConnection(conn net.Conn) {
 
 	switch msg.Type {
 	case prot.Type_REQ:
-		log.Println("Got request")
 		if err := n.handleRequest(conn, msg.Data); err != nil {
 			log.Printf("Failed to handle request from %s: %s\n", remoteAddr, err)
+			return
 		}
 	case prot.Type_PEER_LIST:
-		log.Println("Got peer list") // TODO
+		// Seeds ignore peer lists
+		if !n.seed {
+			log.Printf("Got peer list from %s\n", remoteAddr)
+			return
+		}
 	}
 }
 
-func (n *Node) broadcast(msg []byte) {
+func (n *Node) broadcast(msg *message) {
 	addrList := n.peerList.getAddresses()
 
 	for _, ad := range addrList {
 		conn, err := net.Dial("tcp", util.IPString(ad, p2pPort))
 		if err != nil {
-			// TODO do some sort of retry procedure then drop peer
+			log.Printf("Failed to dial %s during broadcast\n", ad)
 			continue
 		}
 
-		_, err = conn.Write(msg)
+		err = n.sendMessage(msg, conn)
 		if err != nil {
-			log.Printf("Failed to write msg to %s during broadcast: %s\n",
-				ad.String(), err)
+			log.Printf("Failed to send message to %s during broadcast: %s\n", ad, err)
 			continue
 		}
 	}
