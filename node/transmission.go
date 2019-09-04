@@ -11,10 +11,6 @@ import (
 
 // transmission.go contains helper and handlers for different types of sent and received messages
 
-const (
-	ioTimeout = time.Second * 2
-)
-
 func (n *Node) handleRequest(conn net.Conn, data []byte) error {
 	// recover request
 	req := &prot.Request{}
@@ -24,36 +20,32 @@ func (n *Node) handleRequest(conn net.Conn, data []byte) error {
 	}
 
 	// identify request type and construct response data
-	var dType prot.Type
+	var kind prot.Type
 	var buf []byte
 	switch req.Type {
 	case prot.Request_PEER_LIST:
-		log.Printf("Got peer list request from %s\n", conn.RemoteAddr().String())
+		log.Printf("Got peer list request from %s\n", conn.RemoteAddr())
 		buf, err = n.makePeerList()
 		if err != nil {
 			return errors.Wrap(err, "make peer list")
 		}
-		dType = prot.Type_PEER_LIST
+		kind = prot.Type_PEER_LIST
+	case prot.Request_IP_SELF:
+		log.Printf("Got ip request from %s\n", conn.RemoteAddr())
+		buf, err = n.makeIpResponse(conn)
+		if err != nil {
+			return errors.Wrap(err, "make ip response")
+		}
+		kind = prot.Type_PEER_LIST
 	default:
 		return errors.New("unknown request type")
 	}
 
-	// wrap data in message and send
-	m := &prot.Message{
-		Type: dType,
-		From: n.ln.Addr().String(),
-		To:   conn.RemoteAddr().String(),
-		Data: buf,
+	err = n.sendMessage(&message{kind: kind, data: buf}, conn)
+	if err != nil {
+		return errors.Wrap(err, "send message")
 	}
 
-	mBuf, err := proto.Marshal(m)
-	if err != nil {
-		return errors.Wrap(err, "marshal message")
-	}
-	_, err = conn.Write(mBuf)
-	if err != nil {
-		return errors.Wrap(err, "transmit message")
-	}
 	return nil
 }
 
@@ -68,6 +60,24 @@ func (n *Node) makePeerList() ([]byte, error) {
 	buf, err := proto.Marshal(pl)
 	if err != nil {
 		return nil, errors.Wrap(err, "marshal peer list")
+	}
+	return buf, nil
+}
+
+func (n *Node) makeIpResponse(conn net.Conn) ([]byte, error) {
+	tcp, err := net.ResolveTCPAddr("tcp", conn.RemoteAddr().String())
+	if err != nil {
+		return nil, errors.Wrap(err, "resolve tcp addr")
+	}
+	ip := net.IPAddr{
+		IP:   tcp.IP,
+		Zone: tcp.Zone,
+	}
+	p := &prot.PeerList_Peer{Address: ip.String()}
+	pl := &prot.PeerList{Peers: []*prot.PeerList_Peer{p}}
+	buf, err := proto.Marshal(pl)
+	if err != nil {
+		return nil, errors.Wrap(err, "marshal ip response")
 	}
 	return buf, nil
 }

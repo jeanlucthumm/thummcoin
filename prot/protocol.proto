@@ -18,6 +18,7 @@ message Message {
 message Request {
     enum Type {
         PEER_LIST = 0;
+        IP_SELF = 1;
     }
     Request.Type type = 1;
 }
