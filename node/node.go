@@ -5,11 +5,10 @@ import (
 	_ "fmt"
 	"github.com/golang/protobuf/proto"
 	"github.com/jeanlucthumm/thummcoin/prot"
+	"github.com/jeanlucthumm/thummcoin/util"
 	"github.com/pkg/errors"
 	"log"
 	"net"
-	"sync"
-	"time"
 )
 
 const (
@@ -22,25 +21,22 @@ const (
 
 // Node handles incoming connections and associated data
 type Node struct {
-	ln       net.Listener   // listens for incoming connections
-	ptable   map[*peer]bool // look up table for all known peers
-	tableMux sync.Mutex     // locks access to ptable. do not use in conjunction with channels
+	ln       net.Listener // listens for incoming connections
+	peerList *peerList
 
-	addPeer chan *peer // adds a peer to ptable
-	delPeer chan *peer // remove a peer from ptable
+	broadcastChan chan []byte
 }
 
 // peer represents a contactable peer
-type peer struct {
-	addr net.TCPAddr
+type Peer struct {
+	addr net.IP
 }
 
 // NewNode initializes a new Node but does not start it
 func NewNode() *Node {
 	return &Node{
-		ptable:  make(map[*peer]bool),
-		addPeer: make(chan *peer, 10),
-		delPeer: make(chan *peer, 10),
+		peerList:      newPeerList(),
+		broadcastChan: make(chan []byte),
 	}
 }
 
@@ -56,9 +52,9 @@ func (n *Node) Start(addr net.Addr) error {
 	}
 
 	// make server responsive
+	n.peerList.start()
 	go n.handleChannels()
 	go n.Discover()
-	go n.pingLoop()
 
 	for {
 		conn, err := n.ln.Accept()
@@ -69,8 +65,6 @@ func (n *Node) Start(addr net.Addr) error {
 
 		go n.handleConnection(conn)
 	}
-
-	return nil
 }
 
 func (n *Node) StartSeed(addr net.Addr) error {
@@ -95,8 +89,6 @@ func (n *Node) StartSeed(addr net.Addr) error {
 
 		go n.handleConnection(conn)
 	}
-
-	return nil
 }
 
 // Discover attempts to find nodes and connect to the network. Must be called after Start.
@@ -113,7 +105,7 @@ func (n *Node) Discover() {
 
 	// request peer list
 	req := &prot.Request{Type: prot.Request_PEER_LIST}
-	buf, err := proto.Marshal(req);
+	rBuf, err := proto.Marshal(req)
 	if err != nil {
 		log.Printf("Failed to marshal request during discovery: %s\n", err.Error())
 	}
@@ -121,9 +113,9 @@ func (n *Node) Discover() {
 		Type: prot.Type_REQ,
 		From: n.ln.Addr().String(),
 		To:   "seed",
-		Data: buf,
+		Data: rBuf,
 	}
-	mBuf, err := proto.Marshal(m);
+	mBuf, err := proto.Marshal(m)
 	if err != nil {
 		log.Printf("Failed to marshal message during discovery: %s\n", err.Error())
 	}
@@ -131,28 +123,30 @@ func (n *Node) Discover() {
 		log.Printf("Failed to write request to seed: %s\n", err.Error())
 	}
 
-	// Wait for response
+	// wait for response
+	buf := make([]byte, readBufferSize)
 	num, err := conn.Read(buf)
 	if err != nil {
 		log.Printf("Failed to read back from seed during discovery: %s\n", err)
 	}
-	log.Printf("Read %d bytes from seed\n", num)
-}
 
-// TODO the port num is changed. need to keep session alive as we wait for response in client.
-// 		Other option is to only do stateless communication, but that defeats the point of TCP
+	// decode and all known peers
+	pl := &prot.PeerList{}
+	err = proto.Unmarshal(buf[:num], pl)
+	if err != nil {
+		log.Printf("Failed to unmarshal peer list from seed: %s\n", err)
+	}
+
+	for _, peer := range pl.Peers {
+		log.Printf("Adding peer with address %s\n", peer.Address)
+	}
+}
 
 func (n *Node) handleChannels() {
 	for {
 		select {
-		case p := <-n.addPeer:
-			n.tableMux.Lock()
-			n.ptable[p] = true
-			n.tableMux.Unlock()
-		case p := <-n.delPeer:
-			n.tableMux.Lock()
-			delete(n.ptable, p)
-			n.tableMux.Unlock()
+		case msg := <-n.broadcastChan:
+			go n.broadcast(msg)
 		}
 	}
 }
@@ -171,9 +165,7 @@ func (n *Node) handleConnection(conn net.Conn) {
 
 	// register this peer
 	if addr, ok := conn.RemoteAddr().(*net.TCPAddr); ok {
-		addrCopy := *addr
-		addrCopy.Port = p2pPort
-		n.addPeer <- &peer{addr: addrCopy}
+		n.peerList.newPeer <- addr.IP
 	}
 
 	// route message
@@ -189,37 +181,24 @@ func (n *Node) handleConnection(conn net.Conn) {
 			log.Printf("Failed to handle request from %s: %s\n", remoteAddr, err)
 		}
 	case prot.Type_PEER_LIST:
-		log.Println("Got peer list")
+		log.Println("Got peer list") // TODO
 	}
 }
 
-func (n *Node) pingLoop() {
-	for {
-		log.Println("Pinging all peers")
-		n.pingAll()
-		time.Sleep(5 * time.Second)
-	}
-}
+func (n *Node) broadcast(msg []byte) {
+	addrList := n.peerList.getAddresses()
 
-func (n *Node) pingAll() {
-	n.tableMux.Lock()
-	defer n.tableMux.Unlock()
-	// FIXME this mux locks the table for too long. Get a copy of all IPs instead
-
-	for p := range n.ptable {
-		// attempt to dial
-		conn, err := net.Dial(p.addr.Network(), p.addr.String())
+	for _, ad := range addrList {
+		conn, err := net.Dial("tcp", util.IPString(ad, p2pPort))
 		if err != nil {
-			log.Printf("Failed ping to %s: %s\n", p.addr.String(), err)
-			delete(n.ptable, p)
+			// TODO do some sort of retry procedure then drop peer
 			continue
 		}
 
-		// attempt to write message
-		_, err = conn.Write([]byte("Hello there, peer!"))
+		_, err = conn.Write(msg)
 		if err != nil {
-			log.Printf("Failed ping write to %s: %s\n", p.addr.String(), err)
-			delete(n.ptable, p)
+			log.Printf("Failed to write msg to %s during broadcast: %s\n",
+				ad.String(), err)
 			continue
 		}
 	}
