@@ -1,6 +1,9 @@
 package node
 
 import (
+	"github.com/golang/protobuf/proto"
+	"github.com/jeanlucthumm/thummcoin/prot"
+	"log"
 	"net"
 	"sync"
 )
@@ -23,8 +26,9 @@ type peer struct {
 	addr net.IP
 }
 
-func newPeerList() *peerList {
+func newPeerList(node *Node) *peerList {
 	return &peerList{
+		node:    node,
 		newPeer: make(chan net.IP, peerBufferCap),
 		stop:    make(chan bool),
 	}
@@ -53,7 +57,18 @@ func (pl *peerList) handleChannels() {
 
 func (pl *peerList) handleNewPeer(addr net.IP) {
 	if pl.addAddrIfNew(addr) {
-		// TODO broadcast new peer to everyone
+		// broadcast new peer to everyone
+		p := &prot.PeerList_Peer{Address: addr.String()}
+		plm := &prot.PeerList{Peers: []*prot.PeerList_Peer{p}}
+		buf, err := proto.Marshal(plm)
+		if err != nil {
+			log.Printf("Failed to marshal peer list for new peer: %s\n", err)
+			return
+		}
+		pl.node.broadcastChan <- &message{
+			kind: prot.Type_PEER_LIST,
+			data: buf,
+		}
 	}
 }
 
@@ -61,25 +76,38 @@ func (pl *peerList) addAddrIfNew(addr net.IP) bool {
 	pl.mux.Lock()
 	defer pl.mux.Unlock()
 
-	found := false
+	newAd := true
 	for _, p := range pl.list {
 		if addr.Equal(p.addr) {
-			found = true
+			newAd = false
 		}
 	}
 
-	if !found {
+	if newAd {
 		pl.list = append(pl.list, newPeer(addr))
 	}
-	return found
+	return newAd
 }
 
 func (pl *peerList) getAddresses() []net.IP {
 	pl.mux.Lock()
 	defer pl.mux.Unlock()
 	list := make([]net.IP, len(pl.list))
-	for _, p := range pl.list {
-		list = append(list, p.addr)
+	for i, p := range pl.list {
+		list[i] = p.addr
 	}
 	return list
+}
+
+func (pl *peerList) String() string {
+	str := "peerList{"
+	for i, p := range pl.list {
+		if i != 0 {
+			str += "," + p.addr.String()
+		} else {
+			str += p.addr.String()
+		}
+	}
+	str += "}"
+	return str
 }
