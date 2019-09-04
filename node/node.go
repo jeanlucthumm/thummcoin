@@ -149,9 +149,7 @@ func (n *Node) discover() {
 		// We continue anyways because that's seed's problem
 	}
 
-	for _, peer := range pl.Peers {
-		log.Printf("Adding peer with address %s\n", peer.Address)
-	}
+	n.processPeerList(pl)
 }
 
 func (n *Node) handleChannels() {
@@ -186,20 +184,34 @@ func (n *Node) handleConnection(conn net.Conn) {
 		msg := &prot.Message{}
 		if err := proto.Unmarshal(b[:num], msg); err != nil {
 			log.Printf("Failed to unmarshal message: %s\n", err)
+			continue
 		}
 
 		switch msg.Type {
 		case prot.Type_REQ:
-			if err := n.handleRequest(conn, msg.Data); err != nil {
+			req := &prot.Request{}
+			err = proto.Unmarshal(msg.Data, req)
+			if err != nil {
+				log.Printf("Failed to unmarshal request from %s: %s\n", remoteAddr, err)
+				continue
+			}
+			if err := n.handleRequest(conn, req); err != nil {
 				log.Printf("Failed to handle request from %s: %s\n", remoteAddr, err)
-				return
+				continue
 			}
 		case prot.Type_PEER_LIST:
 			// Seeds ignore peer lists
-			if !n.seed {
-				log.Printf("Got peer list from %s\n", remoteAddr)
-
+			if n.seed {
+				continue
 			}
+			log.Printf("Got peer list from %s\n", remoteAddr)
+			pl := &prot.PeerList{}
+			err = proto.Unmarshal(msg.Data, pl)
+			if err != nil {
+				log.Printf("Failed to unmarshal peer list from %s: %s\n", remoteAddr, err)
+				continue
+			}
+			go n.processPeerList(pl)
 		}
 	}
 }

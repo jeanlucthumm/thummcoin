@@ -12,17 +12,11 @@ import (
 
 // transmission.go contains helper and handlers for different types of sent and received messages
 
-func (n *Node) handleRequest(conn net.Conn, data []byte) error {
-	// recover request
-	req := &prot.Request{}
-	err := proto.Unmarshal(data, req)
-	if err != nil {
-		return errors.Wrap(err, "unmarshal request")
-	}
-
+func (n *Node) handleRequest(conn net.Conn, req *prot.Request) error {
 	// identify request type and construct response data
 	var kind prot.Type
 	var buf []byte
+	var err error
 	switch req.Type {
 	case prot.Request_PEER_LIST:
 		log.Printf("Got peer list request from %s\n", conn.RemoteAddr())
@@ -50,13 +44,7 @@ func (n *Node) handleRequest(conn net.Conn, data []byte) error {
 	return nil
 }
 
-func (n *Node) processPeerList(data []byte) {
-	pl := &prot.PeerList{}
-	err := proto.Unmarshal(data, pl)
-	if err != nil {
-		log.Printf("Failed to unmarshal peer list: %s\n", err)
-		return
-	}
+func (n *Node) processPeerList(pl *prot.PeerList) {
 	for _, p := range pl.Peers {
 		ip, err := net.ResolveIPAddr("ip", p.Address)
 		if err != nil {
@@ -65,6 +53,8 @@ func (n *Node) processPeerList(data []byte) {
 		if util.IPEqual(*ip, n.ip) {
 			continue
 		}
+
+		n.peerList.newPeer <- *ip
 	}
 }
 

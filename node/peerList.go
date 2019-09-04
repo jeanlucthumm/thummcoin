@@ -57,7 +57,8 @@ func (pl *peerList) handleChannels() {
 }
 
 func (pl *peerList) handleNewPeer(addr net.IPAddr) {
-	if pl.addAddrIfNew(addr) {
+	// Since seed nodes are for minimal bootstrap, no need for broadcast
+	if pl.addAddrIfNew(addr) && !pl.node.seed {
 		// broadcast new peer to everyone
 		p := &prot.PeerList_Peer{Address: addr.String()}
 		plm := &prot.PeerList{Peers: []*prot.PeerList_Peer{p}}
@@ -71,6 +72,7 @@ func (pl *peerList) handleNewPeer(addr net.IPAddr) {
 			data: buf,
 		}
 	}
+	log.Println(pl.String()) // DEBUG
 }
 
 func (pl *peerList) addAddrIfNew(addr net.IPAddr) bool {
