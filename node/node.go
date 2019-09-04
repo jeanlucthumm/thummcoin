@@ -6,6 +6,7 @@ import (
 	"github.com/jeanlucthumm/thummcoin/prot"
 	"github.com/jeanlucthumm/thummcoin/util"
 	"github.com/pkg/errors"
+	"io"
 	"log"
 	"net"
 	"strconv"
@@ -142,6 +143,12 @@ func (n *Node) discover() {
 		return
 	}
 
+	err = conn.Close()
+	if err != nil {
+		log.Printf("Failed to close connection to seed: %s\n", err)
+		// We continue anyways because that's seed's problem
+	}
+
 	for _, peer := range pl.Peers {
 		log.Printf("Adding peer with address %s\n", peer.Address)
 	}
@@ -160,34 +167,39 @@ func (n *Node) handleConnection(conn net.Conn) {
 	// TODO consider setting a read deadline
 	remoteAddr := conn.RemoteAddr().String()
 	b := make([]byte, readBufferSize) // FIXME messages can be much larger than that
-	num, err := conn.Read(b)
-	if err != nil {
-		log.Printf("Failed read from %s: %s\n", remoteAddr)
-		return
-	}
-
-	// register this peer
-	if addr, ok := conn.RemoteAddr().(*net.TCPAddr); ok {
-		n.peerList.newPeer <- addr.IP
-	}
-
-	// route message
-	msg := &prot.Message{}
-	if err := proto.Unmarshal(b[:num], msg); err != nil {
-		log.Printf("Failed to unmarshal message: %s\n", err)
-	}
-
-	switch msg.Type {
-	case prot.Type_REQ:
-		if err := n.handleRequest(conn, msg.Data); err != nil {
-			log.Printf("Failed to handle request from %s: %s\n", remoteAddr, err)
+	for {
+		num, err := conn.Read(b)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			log.Printf("Failed read from %s: %s\n", remoteAddr)
 			return
 		}
-	case prot.Type_PEER_LIST:
-		// Seeds ignore peer lists
-		if !n.seed {
-			log.Printf("Got peer list from %s\n", remoteAddr)
-			return
+
+		// register this peer
+		if addr, ok := conn.RemoteAddr().(*net.TCPAddr); ok {
+			n.peerList.newPeer <- addr.IP
+		}
+
+		// route message
+		msg := &prot.Message{}
+		if err := proto.Unmarshal(b[:num], msg); err != nil {
+			log.Printf("Failed to unmarshal message: %s\n", err)
+		}
+
+		switch msg.Type {
+		case prot.Type_REQ:
+			if err := n.handleRequest(conn, msg.Data); err != nil {
+				log.Printf("Failed to handle request from %s: %s\n", remoteAddr, err)
+				return
+			}
+		case prot.Type_PEER_LIST:
+			// Seeds ignore peer lists
+			if !n.seed {
+				log.Printf("Got peer list from %s\n", remoteAddr)
+				return
+			}
 		}
 	}
 }
@@ -206,6 +218,11 @@ func (n *Node) broadcast(msg *message) {
 		if err != nil {
 			log.Printf("Failed to send message to %s during broadcast: %s\n", ad, err)
 			continue
+		}
+
+		err = conn.Close()
+		if err != nil {
+			log.Printf("Failed to close connection to %s during broadcast: %s\n", ad, err)
 		}
 	}
 }
