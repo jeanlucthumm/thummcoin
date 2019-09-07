@@ -212,6 +212,8 @@ func (n *Node) handleConnection(conn net.Conn) {
 				continue
 			}
 			go n.processPeerList(pl)
+		case prot.Type_TEXT:
+			log.Printf("Got text from %s: %s\n", remoteAddr, string(msg.Data))
 		}
 	}
 }
