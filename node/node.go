@@ -26,10 +26,10 @@ type Node struct {
 	seed     bool
 	ip       net.IPAddr
 
-	broadcastChan chan *message
+	Broadcast chan *Message
 }
 
-type message struct {
+type Message struct {
 	kind prot.Type
 	data []byte
 }
@@ -37,8 +37,8 @@ type message struct {
 // NewNode initializes a new Node but does not start it
 func NewNode(seed bool) *Node {
 	n := &Node{
-		seed:          seed,
-		broadcastChan: make(chan *message),
+		seed:      seed,
+		Broadcast: make(chan *Message),
 	}
 	n.peerList = newPeerList(n)
 	return n
@@ -90,7 +90,7 @@ func (n *Node) discover() {
 		log.Printf("Failed to marshal ip request during discovery: %s\n", err)
 		return
 	}
-	mi := &message{
+	mi := &Message{
 		kind: prot.Type_REQ,
 		data: riBuf,
 	}
@@ -126,7 +126,7 @@ func (n *Node) discover() {
 		log.Printf("Failed to marshal peer list req during discovery: %s\n", err)
 		return
 	}
-	mpl := &message{
+	mpl := &Message{
 		kind: prot.Type_REQ,
 		data: rplBuf,
 	}
@@ -155,7 +155,7 @@ func (n *Node) discover() {
 func (n *Node) handleChannels() {
 	for {
 		select {
-		case msg := <-n.broadcastChan:
+		case msg := <-n.Broadcast:
 			go n.broadcast(msg)
 		}
 	}
@@ -216,7 +216,7 @@ func (n *Node) handleConnection(conn net.Conn) {
 	}
 }
 
-func (n *Node) broadcast(msg *message) {
+func (n *Node) broadcast(msg *Message) {
 	addrList := n.peerList.getAddresses()
 
 	for _, ad := range addrList {

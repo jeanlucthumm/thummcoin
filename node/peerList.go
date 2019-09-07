@@ -67,12 +67,11 @@ func (pl *peerList) handleNewPeer(addr net.IPAddr) {
 			log.Printf("Failed to marshal peer list for new peer: %s\n", err)
 			return
 		}
-		pl.node.broadcastChan <- &message{
+		pl.node.Broadcast <- &Message{
 			kind: prot.Type_PEER_LIST,
 			data: buf,
 		}
 	}
-	log.Println(pl.String()) // DEBUG
 }
 
 func (pl *peerList) addAddrIfNew(addr net.IPAddr) bool {
