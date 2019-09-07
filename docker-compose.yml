@@ -7,10 +7,13 @@ services:
     volumes:
       - .:/go/src/github.com/jeanlucthumm/thummcoin
     command: --seed
+    stdin_open: true
+    tty: true
   client:
     image: thummcoin
     depends_on:
       - seed
     volumes:
       - .:/go/src/github.com/jeanlucthumm/thummcoin
-    # command:
+    stdin_open: true
+    tty: true

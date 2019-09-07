@@ -2,9 +2,11 @@ package main
 
 import (
 	"flag"
+	"github.com/jeanlucthumm/thummcoin/cli"
 	"github.com/jeanlucthumm/thummcoin/p2p"
 	"log"
 	"net"
+	"os"
 )
 
 func main() {
@@ -18,5 +20,8 @@ func main() {
 
 	if err := n.Start(addr); err != nil {
 		log.Printf("Failed to start node: %s\n", err)
+		return
 	}
+
+	cli.Interpret(os.Stdin, n)
 }

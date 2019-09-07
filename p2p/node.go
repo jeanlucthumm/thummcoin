@@ -16,6 +16,7 @@ import (
 const (
 	p2pPort        = 8080
 	ioTimeout      = time.Second * 2
+	seedTimeout    = 2
 	readBufferSize = 4096 // size of read buffer for incoming connections in bytes
 )
 
@@ -27,6 +28,7 @@ type Node struct {
 	ip       net.IPAddr
 
 	Broadcast chan *Message
+	Done      chan bool
 }
 
 type Message struct {
@@ -39,6 +41,7 @@ func NewNode(seed bool) *Node {
 	n := &Node{
 		seed:      seed,
 		Broadcast: make(chan *Message),
+		Done:      make(chan bool),
 	}
 	n.peerList = newPeerList(n)
 	return n
@@ -61,15 +64,19 @@ func (n *Node) Start(addr net.Addr) error {
 		go n.discover()
 	}
 
-	for {
-		conn, err := n.ln.Accept()
-		if err != nil {
-			log.Println(err)
-			continue
-		}
+	go func() {
+		for {
+			conn, err := n.ln.Accept()
+			if err != nil {
+				log.Println(err)
+				continue
+			}
 
-		go n.handleConnection(conn)
-	}
+			go n.handleConnection(conn)
+		}
+	}()
+
+	return nil
 }
 
 // discover attempts to find nodes and connect to the network. Must be called after Start.
@@ -77,10 +84,15 @@ func (n *Node) Start(addr net.Addr) error {
 // when in seed mode.
 func (n *Node) discover() {
 	// resolve seed
-	conn, err := net.Dial("tcp", "seed:"+strconv.Itoa(p2pPort))
-	if err != nil {
+	var conn net.Conn
+	for {
+		var err error
+		conn, err = net.Dial("tcp", "seed:"+strconv.Itoa(p2pPort))
+		if err == nil {
+			break
+		}
 		log.Println("Failed to resolve seed host name")
-		return
+		time.Sleep(time.Second * seedTimeout)
 	}
 
 	// identify IP
