@@ -5,6 +5,7 @@ enum Type {
     PING = 0;
     REQ = 1;
     PEER_LIST = 2;
+    TEXT = 3;
 }
 
 message Message {

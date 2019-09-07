@@ -36,7 +36,7 @@ func (n *Node) handleRequest(conn net.Conn, req *prot.Request) error {
 		return errors.New("unknown request type")
 	}
 
-	err = n.sendMessage(&Message{kind: kind, data: buf}, conn)
+	err = n.sendMessage(&Message{Kind: kind, Data: buf}, conn)
 	if err != nil {
 		return errors.Wrap(err, "send message")
 	}
@@ -93,10 +93,10 @@ func (n *Node) makeIpResponse(conn net.Conn) ([]byte, error) {
 
 func (n *Node) sendMessage(msg *Message, conn net.Conn) error {
 	m := &prot.Message{
-		Type: msg.kind,
+		Type: msg.Kind,
 		From: n.ln.Addr().String(),
 		To:   conn.RemoteAddr().String(),
-		Data: msg.data,
+		Data: msg.Data,
 	}
 	buf, err := proto.Marshal(m)
 	if err != nil {

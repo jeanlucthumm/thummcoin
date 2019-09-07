@@ -68,8 +68,8 @@ func (pl *peerList) handleNewPeer(addr net.IPAddr) {
 			return
 		}
 		pl.node.Broadcast <- &Message{
-			kind: prot.Type_PEER_LIST,
-			data: buf,
+			Kind: prot.Type_PEER_LIST,
+			Data: buf,
 		}
 	}
 }

@@ -30,8 +30,8 @@ type Node struct {
 }
 
 type Message struct {
-	kind prot.Type
-	data []byte
+	Kind prot.Type
+	Data []byte
 }
 
 // NewNode initializes a new Node but does not start it
@@ -91,8 +91,8 @@ func (n *Node) discover() {
 		return
 	}
 	mi := &Message{
-		kind: prot.Type_REQ,
-		data: riBuf,
+		Kind: prot.Type_REQ,
+		Data: riBuf,
 	}
 	err = n.sendMessage(mi, conn)
 	if err != nil {
@@ -127,8 +127,8 @@ func (n *Node) discover() {
 		return
 	}
 	mpl := &Message{
-		kind: prot.Type_REQ,
-		data: rplBuf,
+		Kind: prot.Type_REQ,
+		Data: rplBuf,
 	}
 	err = n.sendMessage(mpl, conn)
 	if err != nil {
