@@ -1,4 +1,4 @@
-package node
+package p2p
 
 import (
 	"github.com/golang/protobuf/proto"
