@@ -24,12 +24,16 @@ func Interpret(in io.Reader, node *p2p.Node) {
 		} else if err != nil {
 			log.Printf("Failed to parse command: %s\n", err)
 		}
+		rest := line[len(cmd):]
 		cmd = cmd[:len(cmd)-1] // remove included delim
-
 		switch cmd {
 		case "msg":
 			if err = msg(reader, node); err != nil {
 				log.Printf("Failed to process msg command: %s\n", err)
+			}
+		case "peers":
+			if err = peers(rest, node); err != nil {
+				log.Printf("Failed to process peers command: %s\n", err)
 			}
 		}
 	}
@@ -71,4 +75,24 @@ func broadcast(msg string, node *p2p.Node) {
 		Data: []byte(msg),
 	}
 	node.Broadcast <- m
+}
+
+func peers(line []byte, node *p2p.Node) error {
+	scan := bufio.NewScanner(bytes.NewReader(line))
+	scan.Split(bufio.ScanWords)
+	if !scan.Scan() {
+		fmt.Println("incomplete peers command")
+		return nil
+	}
+	switch scan.Text() {
+	case "list":
+		ips := node.ListPeers()
+		for _, ip := range ips {
+			fmt.Println(ip.String())
+		}
+	default:
+		fmt.Println("unknown peers command")
+		return nil
+	}
+	return nil
 }

@@ -79,6 +79,10 @@ func (n *Node) Start(addr net.Addr) error {
 	return nil
 }
 
+func (n *Node) ListPeers() []net.IPAddr {
+	return n.peerList.getAddresses()
+}
+
 // discover attempts to find nodes and connect to the network. Must be called after Start.
 // It does not check for self-connection and automatically dials seed, so it should not be used
 // when in seed mode.
