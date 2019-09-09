@@ -6,12 +6,14 @@ import (
 	"github.com/jeanlucthumm/thummcoin/prot"
 	"github.com/jeanlucthumm/thummcoin/util"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 	"io"
-	"log"
 	"net"
 	"strconv"
 	"time"
 )
+
+var glog = logrus.WithField("mod", "node")
 
 const (
 	p2pPort        = 8080
@@ -68,7 +70,7 @@ func (n *Node) Start(addr net.Addr) error {
 		for {
 			conn, err := n.ln.Accept()
 			if err != nil {
-				log.Println(err)
+				logrus.Println(err)
 				continue
 			}
 
@@ -95,15 +97,17 @@ func (n *Node) discover() {
 		if err == nil {
 			break
 		}
-		log.Println("Failed to resolve seed host name")
+		glog.Info("Failed to resolve seed host name")
 		time.Sleep(time.Second * seedTimeout)
 	}
+
+	log := glog.WithField("act", "discovery")
 
 	// identify IP
 	reqIp := &prot.Request{Type: prot.Request_IP_SELF}
 	riBuf, err := proto.Marshal(reqIp)
 	if err != nil {
-		log.Printf("Failed to marshal ip request during discovery: %s\n", err)
+		log.Errorf("Failed to marshal ip request: %s", err)
 		return
 	}
 	mi := &Message{
@@ -112,34 +116,34 @@ func (n *Node) discover() {
 	}
 	err = n.sendMessage(mi, conn)
 	if err != nil {
-		log.Printf("Failed to send ip req to seed: %s\n", err)
+		log.Errorf("Failed to send ip req to seed: %s\n", err)
 		return
 	}
 
 	ipPl := &prot.PeerList{}
 	err = n.recvMessage(conn, ipPl)
 	if err != nil {
-		log.Printf("Failed to receive ip from seed: %s\n", err)
+		log.Errorf("Failed to receive ip from seed: %s\n", err)
 		return
 	}
 	if len(ipPl.Peers) == 0 {
-		log.Println("Invalid self ip response from seed: peer list is empty")
+		log.Error("Invalid self ip response from seed: peer list is empty")
 		return
 	}
 	ip, err := net.ResolveIPAddr("ip", ipPl.Peers[0].Address)
 	if err != nil {
-		log.Printf("Failed to resolve ip response addr: %s\n", err)
+		log.Errorf("Failed to resolve ip response addr: %s\n", err)
 		return
 	}
 	n.ip = *ip
 
-	log.Printf("Self-identified as %s\n", n.ip.String())
+	log.WithField("ip", n.ip.String()).Info("Self-identified")
 
 	// request peer list
 	reqPl := &prot.Request{Type: prot.Request_PEER_LIST}
 	rplBuf, err := proto.Marshal(reqPl)
 	if err != nil {
-		log.Printf("Failed to marshal peer list req during discovery: %s\n", err)
+		log.Errorf("Failed to marshal peer list: %s\n", err)
 		return
 	}
 	mpl := &Message{
@@ -148,20 +152,20 @@ func (n *Node) discover() {
 	}
 	err = n.sendMessage(mpl, conn)
 	if err != nil {
-		log.Printf("Failed to send peer list request to seed: %s\n", err)
+		log.Errorf("Failed to send peer list request to seed: %s\n", err)
 		return
 	}
 
 	pl := &prot.PeerList{}
 	err = n.recvMessage(conn, pl)
 	if err != nil {
-		log.Printf("Failed to receive peer list from seed: %s\n", err)
+		log.Errorf("Failed to receive peer list from seed: %s\n", err)
 		return
 	}
 
 	err = conn.Close()
 	if err != nil {
-		log.Printf("Failed to close connection to seed: %s\n", err)
+		log.Errorf("Failed to close connection to seed: %s\n", err)
 		// We continue anyways because that's seed's problem
 	}
 
@@ -179,7 +183,7 @@ func (n *Node) handleChannels() {
 
 func (n *Node) handleConnection(conn net.Conn) {
 	// TODO consider setting a read deadline
-	remoteAddr := conn.RemoteAddr().String()
+	log := glog.WithField("from", util.AddrString(conn.RemoteAddr()))
 	b := make([]byte, readBufferSize) // FIXME messages can be much larger than that
 	for {
 		num, err := conn.Read(b)
@@ -187,7 +191,7 @@ func (n *Node) handleConnection(conn net.Conn) {
 			break
 		}
 		if err != nil {
-			log.Printf("Failed read from %s: %s\n", remoteAddr)
+			log.Errorf("Failed connection read: %s\n", err)
 			return
 		}
 
@@ -199,7 +203,7 @@ func (n *Node) handleConnection(conn net.Conn) {
 		// route message
 		msg := &prot.Message{}
 		if err := proto.Unmarshal(b[:num], msg); err != nil {
-			log.Printf("Failed to unmarshal message: %s\n", err)
+			log.Errorf("Failed to unmarshal message: %s\n", err)
 			continue
 		}
 
@@ -208,11 +212,11 @@ func (n *Node) handleConnection(conn net.Conn) {
 			req := &prot.Request{}
 			err = proto.Unmarshal(msg.Data, req)
 			if err != nil {
-				log.Printf("Failed to unmarshal request from %s: %s\n", remoteAddr, err)
+				log.Errorf("Failed to unmarshal request: %s\n", err)
 				continue
 			}
 			if err := n.handleRequest(conn, req); err != nil {
-				log.Printf("Failed to handle request from %s: %s\n", remoteAddr, err)
+				log.Errorf("Failed to handle request: %s\n", err)
 				continue
 			}
 		case prot.Type_PEER_LIST:
@@ -220,39 +224,41 @@ func (n *Node) handleConnection(conn net.Conn) {
 			if n.seed {
 				continue
 			}
-			log.Printf("Got peer list from %s\n", remoteAddr)
+			log.Debug("Got peer list")
 			pl := &prot.PeerList{}
 			err = proto.Unmarshal(msg.Data, pl)
 			if err != nil {
-				log.Printf("Failed to unmarshal peer list from %s: %s\n", remoteAddr, err)
+				log.Errorf("Failed to unmarshal peer list: %s\n", err)
 				continue
 			}
 			go n.processPeerList(pl)
 		case prot.Type_TEXT:
-			log.Printf("Got text from %s: %s\n", remoteAddr, string(msg.Data))
+			log.Debugf("Got text: %s", string(msg.Data))
 		}
 	}
 }
 
 func (n *Node) broadcast(msg *Message) {
 	addrList := n.peerList.getAddresses()
+	log := glog.WithField("act", "broadcast")
 
 	for _, ad := range addrList {
+		llog := log.WithField("remote", ad.String())
 		conn, err := net.Dial("tcp", util.IPDialString(ad, p2pPort))
 		if err != nil {
-			log.Printf("Failed to dial %s during broadcast\n", ad)
+			llog.Errorf("Failed to dial: %s", err)
 			continue
 		}
 
 		err = n.sendMessage(msg, conn)
 		if err != nil {
-			log.Printf("Failed to send message to %s during broadcast: %s\n", ad, err)
+			llog.Errorf("Failed to send message: %s", err)
 			continue
 		}
 
 		err = conn.Close()
 		if err != nil {
-			log.Printf("Failed to close connection to %s during broadcast: %s\n", ad, err)
+			llog.Errorf("Failed to close connection %s", err)
 		}
 	}
 }

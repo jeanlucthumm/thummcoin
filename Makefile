@@ -22,3 +22,7 @@ upbk: stop
 # Attach to specific containers
 att:
 	docker attach thummcoin_client_$(T)
+
+# Listen to specific containers
+list:
+	docker logs -f thummcoin_client_$(T)

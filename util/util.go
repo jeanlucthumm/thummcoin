@@ -27,3 +27,12 @@ func IPDialString(ip *net.IPAddr, port int) string {
 	tcp := TCPFromIP(ip, port)
 	return tcp.String()
 }
+
+func AddrString(addr net.Addr) string {
+	switch addr.(type) {
+	case *net.TCPAddr:
+		return IPFromTCP(addr.(*net.TCPAddr)).String()
+	default:
+		return addr.String()
+	}
+}

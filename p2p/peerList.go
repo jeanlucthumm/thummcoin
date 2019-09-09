@@ -4,7 +4,6 @@ import (
 	"github.com/golang/protobuf/proto"
 	"github.com/jeanlucthumm/thummcoin/prot"
 	"github.com/jeanlucthumm/thummcoin/util"
-	"log"
 	"net"
 	"sync"
 )
@@ -64,7 +63,7 @@ func (pl *peerList) handleNewPeer(addr *net.IPAddr) {
 		plm := &prot.PeerList{Peers: []*prot.PeerList_Peer{p}}
 		buf, err := proto.Marshal(plm)
 		if err != nil {
-			log.Printf("Failed to marshal peer list for new peer: %s\n", err)
+			glog.Errorf("Failed to marshal peer list for new peer: %s", err)
 			return
 		}
 		pl.node.Broadcast <- &Message{

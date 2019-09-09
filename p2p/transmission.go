@@ -5,7 +5,6 @@ import (
 	"github.com/jeanlucthumm/thummcoin/prot"
 	"github.com/jeanlucthumm/thummcoin/util"
 	"github.com/pkg/errors"
-	"log"
 	"net"
 	"time"
 )
@@ -17,16 +16,17 @@ func (n *Node) handleRequest(conn net.Conn, req *prot.Request) error {
 	var kind prot.Type
 	var buf []byte
 	var err error
+	log := glog.WithField("from", util.AddrString(conn.RemoteAddr()))
 	switch req.Type {
 	case prot.Request_PEER_LIST:
-		log.Printf("Got peer list request from %s\n", conn.RemoteAddr())
+		log.Debug("Got peer list")
 		buf, err = n.makePeerList()
 		if err != nil {
 			return errors.Wrap(err, "make peer list")
 		}
 		kind = prot.Type_PEER_LIST
 	case prot.Request_IP_SELF:
-		log.Printf("Got ip request from %s\n", conn.RemoteAddr())
+		log.Debug("Got ip request")
 		buf, err = n.makeIpResponse(conn)
 		if err != nil {
 			return errors.Wrap(err, "make ip response")
@@ -48,7 +48,7 @@ func (n *Node) processPeerList(pl *prot.PeerList) {
 	for _, p := range pl.Peers {
 		ip, err := net.ResolveIPAddr("ip", p.Address)
 		if err != nil {
-			log.Printf("Failed to resolve ip address %s from peer list: %s\n", p.Address, err)
+			glog.Errorf("Failed to resolve %s from peer list: %s", p.Address, err)
 		}
 		if util.IPEqual(ip, &n.ip) {
 			continue

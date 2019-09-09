@@ -4,12 +4,15 @@ import (
 	"flag"
 	"github.com/jeanlucthumm/thummcoin/cli"
 	"github.com/jeanlucthumm/thummcoin/p2p"
+	"github.com/sirupsen/logrus"
 	"log"
 	"net"
 	"os"
 )
 
 func main() {
+	logrus.SetLevel(logrus.TraceLevel)
+
 	var seedMode = flag.Bool("seed", false, "enable seeding mode")
 	flag.Parse()
 

@@ -7,9 +7,11 @@ import (
 	"github.com/jeanlucthumm/thummcoin/p2p"
 	"github.com/jeanlucthumm/thummcoin/prot"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 	"io"
-	"log"
 )
+
+var log = logrus.WithField("mod", "cli")
 
 func Interpret(in io.Reader, node *p2p.Node) {
 	lScan := bufio.NewScanner(in)
@@ -22,18 +24,18 @@ func Interpret(in io.Reader, node *p2p.Node) {
 		if err == io.EOF {
 			fmt.Println("incomplete command")
 		} else if err != nil {
-			log.Printf("Failed to parse command: %s\n", err)
+			log.Errorf("Failed to parse command: %s\n", err)
 		}
 		rest := line[len(cmd):]
 		cmd = cmd[:len(cmd)-1] // remove included delim
 		switch cmd {
 		case "msg":
 			if err = msg(reader, node); err != nil {
-				log.Printf("Failed to process msg command: %s\n", err)
+				log.Errorf("Failed to process msg command: %s\n", err)
 			}
 		case "peers":
 			if err = peers(rest, node); err != nil {
-				log.Printf("Failed to process peers command: %s\n", err)
+				log.Errorf("Failed to process peers command: %s\n", err)
 			}
 		}
 	}
