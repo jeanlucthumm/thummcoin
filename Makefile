@@ -26,3 +26,7 @@ att:
 # Listen to specific containers
 list:
 	docker logs -f thummcoin_client_$(T)
+
+# Compile protobuffers
+proto:
+	protoc -I=prot --go_out=prot prot/*.proto

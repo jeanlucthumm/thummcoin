@@ -19,5 +19,6 @@
 
 # End of https://www.gitignore.io/api/go
 
-### User additions
+### User additions ###
 .idea/
+prot/*.pb.go
