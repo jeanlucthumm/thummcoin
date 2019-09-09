@@ -50,11 +50,11 @@ func (n *Node) processPeerList(pl *prot.PeerList) {
 		if err != nil {
 			log.Printf("Failed to resolve ip address %s from peer list: %s\n", p.Address, err)
 		}
-		if util.IPEqual(*ip, n.ip) {
+		if util.IPEqual(ip, &n.ip) {
 			continue
 		}
 
-		n.peerList.newPeer <- *ip
+		n.peerList.newPeer <- ip
 	}
 }
 

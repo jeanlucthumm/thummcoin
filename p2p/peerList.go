@@ -19,7 +19,7 @@ type peerList struct {
 	list []*peer
 	node *Node
 
-	newPeer chan net.IPAddr
+	newPeer chan *net.IPAddr
 	stop    chan bool
 }
 
@@ -30,14 +30,14 @@ type peer struct {
 func newPeerList(node *Node) *peerList {
 	return &peerList{
 		node:    node,
-		newPeer: make(chan net.IPAddr, peerBufferCap),
+		newPeer: make(chan *net.IPAddr, peerBufferCap),
 		stop:    make(chan bool),
 	}
 }
 
-func newPeer(addr net.IPAddr) *peer {
+func newPeer(addr *net.IPAddr) *peer {
 	return &peer{
-		addr: addr,
+		addr: *addr,
 	}
 }
 
@@ -56,7 +56,7 @@ func (pl *peerList) handleChannels() {
 	}
 }
 
-func (pl *peerList) handleNewPeer(addr net.IPAddr) {
+func (pl *peerList) handleNewPeer(addr *net.IPAddr) {
 	// Since seed nodes are for minimal bootstrap, no need for broadcast
 	if pl.addAddrIfNew(addr) && !pl.node.seed {
 		// broadcast new peer to everyone
@@ -74,13 +74,13 @@ func (pl *peerList) handleNewPeer(addr net.IPAddr) {
 	}
 }
 
-func (pl *peerList) addAddrIfNew(addr net.IPAddr) bool {
+func (pl *peerList) addAddrIfNew(addr *net.IPAddr) bool {
 	pl.mux.Lock()
 	defer pl.mux.Unlock()
 
 	newAd := true
 	for _, p := range pl.list {
-		if util.IPEqual(addr, p.addr) {
+		if util.IPEqual(addr, &p.addr) {
 			newAd = false
 		}
 	}
@@ -91,12 +91,12 @@ func (pl *peerList) addAddrIfNew(addr net.IPAddr) bool {
 	return newAd
 }
 
-func (pl *peerList) getAddresses() []net.IPAddr {
+func (pl *peerList) getAddresses() []*net.IPAddr {
 	pl.mux.Lock()
 	defer pl.mux.Unlock()
-	list := make([]net.IPAddr, len(pl.list))
+	list := make([]*net.IPAddr, len(pl.list))
 	for i, p := range pl.list {
-		list[i] = p.addr
+		list[i] = &p.addr
 	}
 	return list
 }

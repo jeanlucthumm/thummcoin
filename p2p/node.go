@@ -79,7 +79,7 @@ func (n *Node) Start(addr net.Addr) error {
 	return nil
 }
 
-func (n *Node) ListPeers() []net.IPAddr {
+func (n *Node) ListPeers() []*net.IPAddr {
 	return n.peerList.getAddresses()
 }
 
@@ -193,7 +193,7 @@ func (n *Node) handleConnection(conn net.Conn) {
 
 		// register this peer
 		if addr, ok := conn.RemoteAddr().(*net.TCPAddr); ok {
-			n.peerList.newPeer <- util.IPFromTCP(*addr)
+			n.peerList.newPeer <- util.IPFromTCP(addr)
 		}
 
 		// route message
