@@ -45,6 +45,7 @@ func (n *Node) handleRequest(conn net.Conn, req *prot.Request) error {
 }
 
 func (n *Node) processPeerList(pl *prot.PeerList) {
+	var addrs []*net.IPAddr
 	for _, p := range pl.Peers {
 		ip, err := net.ResolveIPAddr("ip", p.Address)
 		if err != nil {
@@ -53,9 +54,9 @@ func (n *Node) processPeerList(pl *prot.PeerList) {
 		if util.IPEqual(ip, &n.ip) {
 			continue
 		}
-
-		n.peerList.newPeer <- ip
+		addrs = append(addrs, ip)
 	}
+	n.peerList.newPeers <- addrs
 }
 
 func (n *Node) makePeerList() ([]byte, error) {

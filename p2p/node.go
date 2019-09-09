@@ -137,7 +137,7 @@ func (n *Node) discover() {
 	}
 	n.ip = *ip
 
-	log.WithField("ip", n.ip.String()).Info("Self-identified")
+	glog.WithField("ip", n.ip.String()).Info("Self-identified")
 
 	// request peer list
 	reqPl := &prot.Request{Type: prot.Request_PEER_LIST}
@@ -197,7 +197,7 @@ func (n *Node) handleConnection(conn net.Conn) {
 
 		// register this peer
 		if addr, ok := conn.RemoteAddr().(*net.TCPAddr); ok {
-			n.peerList.newPeer <- util.IPFromTCP(addr)
+			n.peerList.newPeers <- []*net.IPAddr{util.IPFromTCP(addr)}
 		}
 
 		// route message

@@ -18,8 +18,8 @@ type peerList struct {
 	list []*peer
 	node *Node
 
-	newPeer chan *net.IPAddr
-	stop    chan bool
+	newPeers chan []*net.IPAddr
+	stop     chan bool
 }
 
 type peer struct {
@@ -28,9 +28,9 @@ type peer struct {
 
 func newPeerList(node *Node) *peerList {
 	return &peerList{
-		node:    node,
-		newPeer: make(chan *net.IPAddr, peerBufferCap),
-		stop:    make(chan bool),
+		node:     node,
+		newPeers: make(chan []*net.IPAddr, peerBufferCap),
+		stop:     make(chan bool),
 	}
 }
 
@@ -47,20 +47,24 @@ func (pl *peerList) start() {
 func (pl *peerList) handleChannels() {
 	for {
 		select {
-		case addr := <-pl.newPeer:
-			go pl.handleNewPeer(addr)
+		case addr := <-pl.newPeers:
+			go pl.handleNewPeers(addr)
 		case <-pl.stop:
 			return
 		}
 	}
 }
 
-func (pl *peerList) handleNewPeer(addr *net.IPAddr) {
+func (pl *peerList) handleNewPeers(addrs []*net.IPAddr) {
 	// Since seed nodes are for minimal bootstrap, no need for broadcast
-	if pl.addAddrIfNew(addr) && !pl.node.seed {
-		// broadcast new peer to everyone
-		p := &prot.PeerList_Peer{Address: addr.String()}
-		plm := &prot.PeerList{Peers: []*prot.PeerList_Peer{p}}
+	newAddrs := pl.addNewAddrs(addrs)
+	if len(newAddrs) != 0 && !pl.node.seed {
+		// broadcast new peers to everyone
+		var peers []*prot.PeerList_Peer
+		for _, a := range newAddrs {
+			peers = append(peers, &prot.PeerList_Peer{Address: a.String()})
+		}
+		plm := &prot.PeerList{Peers: peers}
 		buf, err := proto.Marshal(plm)
 		if err != nil {
 			glog.Errorf("Failed to marshal peer list for new peer: %s", err)
@@ -73,21 +77,26 @@ func (pl *peerList) handleNewPeer(addr *net.IPAddr) {
 	}
 }
 
-func (pl *peerList) addAddrIfNew(addr *net.IPAddr) bool {
+func (pl *peerList) addNewAddrs(addrs []*net.IPAddr) []*net.IPAddr {
 	pl.mux.Lock()
 	defer pl.mux.Unlock()
 
-	newAd := true
-	for _, p := range pl.list {
-		if util.IPEqual(addr, &p.addr) {
-			newAd = false
+	var newAddrs []*net.IPAddr
+
+	for _, addr := range addrs {
+		seen := false
+		for _, p := range pl.list {
+			if util.IPEqual(addr, &p.addr) {
+				seen = true
+			}
+		}
+		if !seen {
+			newAddrs = append(newAddrs, addr)
+			pl.list = append(pl.list, newPeer(addr))
 		}
 	}
 
-	if newAd {
-		pl.list = append(pl.list, newPeer(addr))
-	}
-	return newAd
+	return newAddrs
 }
 
 func (pl *peerList) getAddresses() []*net.IPAddr {
